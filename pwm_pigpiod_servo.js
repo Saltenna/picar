@@ -1,4 +1,7 @@
 // pwm_pigpiod_servo.js
+// This pwm backend drives Raspberry Pi 3 and 4 pigpiod via the gpiod daemon
+// you must run: sudo systemctl start pigpiod.service
+//
 
 const pigpio = require('pigpio-client').pigpio;
 const client = pigpio();

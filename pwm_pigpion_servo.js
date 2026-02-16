@@ -1,3 +1,9 @@
+// pwm_pigpion_servo.js
+// This pwm backend drives the pwm on raspberry pi 3 and 4 via the 
+// native or raw pwm driver. it avoids the systemd pigpiod daemon
+// it should not be necessary but may require root permissions to drive it
+//
+
 const pigpio = require('pigpio');
 const Gpio = pigpio.Gpio;
 

@@ -1,4 +1,7 @@
 // pwm_sysfs_servo.js
+// This backend is only used if the linux distro exports the sysfs interface for pwm in 
+// /sys/class/pwm/pwmchip*
+//
 
 const fs = require('fs');
 const path = require('path');

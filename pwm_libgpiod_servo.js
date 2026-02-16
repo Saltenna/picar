@@ -1,4 +1,7 @@
 // pwm_libgpiod_servo.js
+// author michael sundius
+// this uses libgpiod for the raspberry pi 5 choose this one only for pi 5
+//
 
 const { execSync } = require('child_process');
 
