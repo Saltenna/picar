@@ -1,6 +1,10 @@
 {
   "comment1": "pigpion is for the native picpio lib in C",
-  "pwm_method": "pigpion",
+  "comment2": "mavproxy is backend for mavproxy to talk w/ pixhawk, push pwm there ",
+  "pwm_method": "mavproxy",
+  "mavproxy_host": "127.0.0.1",
+  "mavproxy_port": 14550,
+  "mavproxy_rate_hz": 20,
   "steering_gpio": 13,
   "throttle_gpio": 12,
   "pwm_period_us": 20000,
