@@ -1,7 +1,7 @@
 # picar
 
 ## Overview
-This is a modernized web-controlled RC car platform running on a Raspberry Pi 5 with Bookworm OS and Node.js v18.19.0. It allows real-time control of a 1/10 scale RC car via a browser, supporting both desktop and mobile control interfaces. The mobile interface uses the device's IMU for tilt-based control.
+This is a modernized web-controlled RC car platform running on a Raspberry Pi 5 with Bookworm OS and Node.js v18.19.0. It allows real-time control of an RC car via a browser, supporting both desktop and mobile control interfaces. The mobile interface uses the device's IMU for tilt-based control.
 
 The car is equipped with:
 - A USB webcam for video streaming
@@ -9,12 +9,12 @@ The car is equipped with:
 - A local HTTPS server that hosts the UI and control API
 
 Originally derived from the original Pi RC car project by [lawsonkeith](https://github.com/XXX/picar), this version:
-- Replaces `pi-blaster` with direct `sysfs` or `libgpiod` control for PWM
+- Replaces `pi-blaster` with an interface allowing direct `sysfs` or `libgpiod` control for PWM, soon to be mavlink and ardupilot
 - Uses current node.js and npm practices
 - Supports modern mobile orientation APIs
 
 ## Hardware Setup
-- **Platform**: Raspberry Pi 5
+- **Platform**: Raspberry Pi 5 or 4B+
 - **Servos**: Controlled via GPIO PWM using sysfs (soon to be replaced with `libgpiod`)
 - **Camera**: USB webcam accessible via `/dev/video0`
 - **Network**: Typically configured to use smartphone hotspot for local control
@@ -27,7 +27,7 @@ There's a video of the project here:
 <dummy video>
 
 ### Pi Power Supply
-When it comes to powering the Pi it is necessary to have a stable 5V power supply otherwise the Pi will reset. I've provided 2 methods of powering the Pi; one using a 7.2V AA battery pack and a 5V linear regulator to give a clean 5V supply and one that uses the ESC power supply and uses a software algorithm to stop the motor accidentally resetting the Pi.
+When it comes to powering the Pi it is necessary to have a stable 5V power supply otherwise the Pi will reset. I've provided 2 methods of powering the Pi; one using a 7.2V AA battery pack and a 5V USB battery or linear regulator to give a clean 5V supply and one that uses the ESC power supply and uses a software algorithm to stop the motor accidentally resetting the Pi.
 
 There are a number of RC car electrical setups but my example uses an ESC and receiver with battery eliminator circuit. The electronics supply normally comes from the ESC and powers the receiver and steering servo with 5V. The receiver normally receives commands from the radio controller then sends them to the ESC (throttle) and steering servo (steering). These commands fall within the 0-5V supplied by the ESC.
 

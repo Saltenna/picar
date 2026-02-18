@@ -1,0 +1,17 @@
+[Unit]
+Description=PiCar Control Server
+After=network.target
+After=mavproxy.service
+
+[Service]
+ExecStart=/usr/bin/node /home/msundius/picar/app.js
+WorkingDirectory=/home/msundius/picar
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+#User=pi
+Environment=NODE_ENV=production
+
+[Install] 
+WantedBy=multi-user.target
+

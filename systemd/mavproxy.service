@@ -1,0 +1,20 @@
+[Unit]
+Description=MAVProxy
+After=network.target
+
+[Service]
+User=pi
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=/var/log/mavproxy
+ExecStart=/home/msundius/venv/mavproxy/bin/mavproxy.py \
+  --master=/dev/ttyACM0 \
+  --baudrate 115200 \
+  --out=udp:127.0.0.1:14550 \
+  --non-interactive
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
