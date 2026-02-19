@@ -65,7 +65,6 @@ function startFFmpeg() {
     '-video_size', '640x480',
     '-i', '/dev/video0',
     '-fflags', 'nobuffer',
-    '-flags', 'low_delay',
     '-f', 'mjpeg',
     '-q:v', '5',
     'pipe:1'

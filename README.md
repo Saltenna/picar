@@ -15,7 +15,7 @@ Originally derived from the original Pi RC car project by [lawsonkeith](https://
 
 ## Hardware Setup
 - **Platform**: Raspberry Pi 5 or 4B+
-- **Servos**: Controlled via GPIO PWM using sysfs (soon to be replaced with `libgpiod`)
+- **Servos**: Controlled via GPIO PWM usinglsusb sysfs (soon to be replaced with `libgpiod`)
 - **Camera**: USB webcam accessible via `/dev/video0`
 - **Network**: Typically configured to use smartphone hotspot for local control
 
