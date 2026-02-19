@@ -171,9 +171,9 @@ Open a browser and go to:
 ```
 https://<raspberry-pi-ip>:8443/socket.html
 ```
-To view the camera stream:
+To view  <u>just</u> the camera stream:
 ```
-https://<raspberry-pi-ip>:8081/stream.mjpg
+https://<raspberry-pi-ip>:8443/stream.mjpg
 ```
 
 ### Configure Pi to Run App on Boot

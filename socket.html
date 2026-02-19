@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Pi Car Control</title>
   <style>
     html, body {
@@ -13,6 +13,7 @@
       overflow: hidden;
       background: black;
       color: white;
+      touch-action: none;
     }
 
     #live {
@@ -32,6 +33,7 @@
       padding: 5px 10px;
       border-radius: 5px;
       font-size: 14px;
+      z-index: 100;
     }
 
     #feedback {
@@ -43,6 +45,7 @@
       border-radius: 5px;
       font-size: 14px;
       text-align: right;
+      z-index: 100;
     }
 
     #enableBtn {
@@ -97,6 +100,70 @@
       cursor: pointer;
       font-size: 14px;
     }
+
+    /* Virtual joystick styles */
+    .joystick-zone {
+      position: fixed;
+      bottom: 30px;
+      width: 150px;
+      height: 150px;
+      z-index: 500;
+      display: none;
+    }
+    #joystickLeft {
+      left: 30px;
+    }
+    #joystickRight {
+      right: 30px;
+    }
+    .joystick-base {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      position: relative;
+    }
+    .joystick-thumb {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .joystick-label {
+      text-align: center;
+      font-size: 12px;
+      margin-top: 5px;
+      opacity: 0.6;
+    }
+
+    /* Keyboard hint for desktop */
+    #keyboardHint {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      text-align: center;
+      z-index: 100;
+      display: none;
+    }
+    #keyboardHint kbd {
+      display: inline-block;
+      padding: 3px 7px;
+      background: #555;
+      border-radius: 3px;
+      margin: 0 2px;
+      font-family: monospace;
+    }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -104,12 +171,35 @@
   <img id="live" src="" alt="Video stream not available">
   <div id="status">Status: Connecting...</div>
   <div id="feedback">Throttle: --<br>Steering: --</div>
-  <button id="enableBtn">Enable Controls</button>
+  <button id="enableBtn" style="display:none;">Enable Orientation</button>
   <button id="menuBtn">☰</button>
   <div id="commandMenu">
     <button id="stopBtn" onclick="toggleStop()">Stop (Neutral)</button>
     <button onclick="disconnectStream()">Disconnect Stream</button>
-    <button onclick="toggleControls()">Toggle Controls</button>
+    <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
+  </div>
+
+  <!-- Virtual joysticks (touch devices) -->
+  <div id="joystickLeft" class="joystick-zone">
+    <div class="joystick-base">
+      <div class="joystick-thumb" id="thumbLeft"></div>
+    </div>
+    <div class="joystick-label">Throttle</div>
+  </div>
+  <div id="joystickRight" class="joystick-zone">
+    <div class="joystick-base">
+      <div class="joystick-thumb" id="thumbRight"></div>
+    </div>
+    <div class="joystick-label">Steering</div>
+  </div>
+
+  <!-- Keyboard hint (desktop) -->
+  <div id="keyboardHint">
+    <kbd>W</kbd> / <kbd>↑</kbd> Forward &nbsp;
+    <kbd>S</kbd> / <kbd>↓</kbd> Reverse<br>
+    <kbd>A</kbd> / <kbd>←</kbd> Left &nbsp;
+    <kbd>D</kbd> / <kbd>→</kbd> Right &nbsp;
+    <kbd>Space</kbd> Stop
   </div>
 
   <script>
@@ -125,18 +215,66 @@
     const menuBtn = document.getElementById('menuBtn');
     const commandMenu = document.getElementById('commandMenu');
     const stopBtn = document.getElementById('stopBtn');
+    const controlModeBtn = document.getElementById('controlModeBtn');
+    const keyboardHint = document.getElementById('keyboardHint');
+    const joystickLeftEl = document.getElementById('joystickLeft');
+    const joystickRightEl = document.getElementById('joystickRight');
+    const thumbLeft = document.getElementById('thumbLeft');
+    const thumbRight = document.getElementById('thumbRight');
 
-    let usingOrientation = false;
     let stopped = false;
     let wakeLock = null;
 
+    // --- Device detection ---
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    // Control modes: 'joystick', 'keyboard', 'orientation'
+    let controlMode = isTouchDevice ? 'joystick' : 'keyboard';
+    let throttleValue = 0;
+    let steeringValue = 0;
+
+    function activateControlMode(mode) {
+      // Teardown previous mode
+      deactivateAllControls();
+      controlMode = mode;
+      controlModeBtn.textContent = `Control: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
+
+      if (mode === 'joystick') {
+        joystickLeftEl.style.display = 'block';
+        joystickRightEl.style.display = 'block';
+        keyboardHint.style.display = 'none';
+        enableBtn.style.display = 'none';
+        statusDiv.textContent = 'Status: Joystick control';
+      } else if (mode === 'keyboard') {
+        joystickLeftEl.style.display = 'none';
+        joystickRightEl.style.display = 'none';
+        keyboardHint.style.display = 'block';
+        enableBtn.style.display = 'none';
+        statusDiv.textContent = 'Status: Keyboard control (WASD / Arrows)';
+      } else if (mode === 'orientation') {
+        joystickLeftEl.style.display = 'none';
+        joystickRightEl.style.display = 'none';
+        keyboardHint.style.display = 'none';
+        requestOrientationPermission();
+      }
+    }
+
+    function deactivateAllControls() {
+      window.removeEventListener('deviceorientation', handleOrientation, true);
+      throttleValue = 0;
+      steeringValue = 0;
+    }
+
+    function cycleControlMode() {
+      const modes = ['joystick', 'keyboard', 'orientation'];
+      const next = modes[(modes.indexOf(controlMode) + 1) % modes.length];
+      activateControlMode(next);
+    }
+
+    // --- Wake Lock ---
     async function requestWakeLock() {
       try {
         wakeLock = await navigator.wakeLock.request('screen');
-        console.log('Wake Lock is active');
-        wakeLock.addEventListener('release', () => {
-          console.log('Wake Lock released');
-        });
+        wakeLock.addEventListener('release', () => {});
       } catch (err) {
         console.error(`Wake Lock error: ${err.name}, ${err.message}`);
       }
@@ -148,49 +286,24 @@
       }
     });
 
+    // --- Menu ---
     menuBtn.addEventListener('click', () => {
       commandMenu.style.display = commandMenu.style.display === 'block' ? 'none' : 'block';
     });
 
+    // --- Startup ---
     window.addEventListener('load', () => {
       requestWakeLock();
-      if (window.DeviceOrientationEvent) {
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-          DeviceOrientationEvent.requestPermission()
-            .then(state => {
-              if (state === 'granted') {
-                window.addEventListener('deviceorientation', handleOrientation, true);
-                usingOrientation = true;
-                enableBtn.style.display = 'none';
-                statusDiv.textContent = 'Status: Orientation control enabled';
-              } else {
-                enableBtn.style.display = 'block';
-                statusDiv.textContent = 'Status: Orientation permission denied';
-              }
-            })
-            .catch(err => {
-              console.warn('Orientation permission error:', err);
-              enableBtn.style.display = 'block';
-            });
-        } else {
-          window.addEventListener('deviceorientation', handleOrientation, true);
-          usingOrientation = true;
-          enableBtn.style.display = 'none';
-          statusDiv.textContent = 'Status: Orientation control enabled';
-        }
-      } else {
-        statusDiv.textContent = 'Status: Orientation not supported';
-        enableBtn.style.display = 'none';
-      }
+      activateControlMode(controlMode);
     });
 
+    // --- Stop / Disconnect ---
     function toggleStop() {
       if (!stopped) {
         socket.emit('fromclient', { throttle: 0, steering: 0 });
         stopBtn.textContent = 'Start';
         stopped = true;
       } else {
-        requestOrientationPermission();
         stopBtn.textContent = 'Stop (Neutral)';
         stopped = false;
       }
@@ -200,56 +313,213 @@
       video.src = '';
     }
 
-    function toggleControls() {
-      if (usingOrientation) {
-        window.removeEventListener('deviceorientation', handleOrientation, true);
-        usingOrientation = false;
-        enableBtn.style.display = 'block';
-        statusDiv.textContent = 'Status: Manual control only';
-      } else {
-        requestOrientationPermission();
-      }
-    }
-
+    // --- Orientation controls ---
     function requestOrientationPermission() {
       if (window.DeviceOrientationEvent) {
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           DeviceOrientationEvent.requestPermission().then(state => {
             if (state === 'granted') {
               window.addEventListener('deviceorientation', handleOrientation, true);
-              usingOrientation = true;
               enableBtn.style.display = 'none';
+              statusDiv.textContent = 'Status: Orientation control';
+            } else {
+              statusDiv.textContent = 'Status: Orientation permission denied';
             }
+          }).catch(() => {
+            statusDiv.textContent = 'Status: Orientation error';
           });
         } else {
           window.addEventListener('deviceorientation', handleOrientation, true);
-          usingOrientation = true;
           enableBtn.style.display = 'none';
+          statusDiv.textContent = 'Status: Orientation control';
         }
+      } else {
+        statusDiv.textContent = 'Status: Orientation not supported';
       }
     }
 
+    function handleOrientation(event) {
+      if (stopped) return;
+      const betadeg = event.beta;
+      const gammadeg = event.gamma;
+      const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 30));
+      const steering = Math.max(-1, Math.min(1, gammadeg / 45));
+      socket.emit('fromclient', { throttle, steering });
+      feedbackDiv.innerHTML =
+        `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
+        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}`;
+    }
+
+    // --- Virtual joystick controls (touch) ---
+    function setupJoystick(zoneEl, thumbEl, axis) {
+      let active = false;
+      let touchId = null;
+      const baseRadius = 75; // half of 150px zone
+      const thumbRadius = 25;
+      const maxDist = baseRadius - thumbRadius;
+
+      function getCenter() {
+        const rect = zoneEl.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }
+
+      function handleMove(clientX, clientY) {
+        const center = getCenter();
+        let dx = clientX - center.x;
+        let dy = clientY - center.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > maxDist) {
+          dx = (dx / dist) * maxDist;
+          dy = (dy / dist) * maxDist;
+        }
+        thumbEl.style.left = (baseRadius + dx) + 'px';
+        thumbEl.style.top = (baseRadius + dy) + 'px';
+
+        if (axis === 'throttle') {
+          // Up = positive throttle (forward), down = negative (reverse)
+          throttleValue = -(dy / maxDist);
+        } else {
+          // Right = positive steering
+          steeringValue = dx / maxDist;
+        }
+        sendJoystickValues();
+      }
+
+      function resetThumb() {
+        thumbEl.style.left = '50%';
+        thumbEl.style.top = '50%';
+        thumbEl.style.transform = 'translate(-50%, -50%)';
+        if (axis === 'throttle') throttleValue = 0;
+        else steeringValue = 0;
+        sendJoystickValues();
+      }
+
+      zoneEl.addEventListener('touchstart', (e) => {
+        if (active) return;
+        const t = e.changedTouches[0];
+        touchId = t.identifier;
+        active = true;
+        thumbEl.style.transform = 'translate(-50%, -50%)';
+        handleMove(t.clientX, t.clientY);
+        e.preventDefault();
+      }, { passive: false });
+
+      zoneEl.addEventListener('touchmove', (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchId) {
+            handleMove(t.clientX, t.clientY);
+            e.preventDefault();
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const endTouch = (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchId) {
+            active = false;
+            touchId = null;
+            resetThumb();
+            e.preventDefault();
+            break;
+          }
+        }
+      };
+      zoneEl.addEventListener('touchend', endTouch, { passive: false });
+      zoneEl.addEventListener('touchcancel', endTouch, { passive: false });
+    }
+
+    let joystickSendInterval = null;
+    function sendJoystickValues() {
+      if (stopped) return;
+      // Throttle sending to ~20Hz to avoid flooding
+      if (joystickSendInterval) return;
+      joystickSendInterval = setTimeout(() => {
+        joystickSendInterval = null;
+        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue });
+        feedbackDiv.innerHTML =
+          `Throttle: ${throttleValue.toFixed(2)}<br>` +
+          `Steering: ${steeringValue.toFixed(2)}`;
+      }, 50);
+    }
+
+    setupJoystick(joystickLeftEl, thumbLeft, 'throttle');
+    setupJoystick(joystickRightEl, thumbRight, 'steering');
+
+    // --- Keyboard controls (desktop) ---
+    const keysDown = {};
+    const KEY_THROTTLE_STEP = 0.05;
+    const KEY_STEERING_STEP = 0.08;
+    let keyboardInterval = null;
+
+    function startKeyboardLoop() {
+      if (keyboardInterval) return;
+      keyboardInterval = setInterval(() => {
+        if (stopped || controlMode !== 'keyboard') return;
+
+        // Throttle
+        if (keysDown['KeyW'] || keysDown['ArrowUp']) {
+          throttleValue = Math.min(1, throttleValue + KEY_THROTTLE_STEP);
+        } else if (keysDown['KeyS'] || keysDown['ArrowDown']) {
+          throttleValue = Math.max(-1, throttleValue - KEY_THROTTLE_STEP);
+        } else {
+          // Decay toward zero
+          if (Math.abs(throttleValue) < KEY_THROTTLE_STEP) throttleValue = 0;
+          else throttleValue -= Math.sign(throttleValue) * KEY_THROTTLE_STEP;
+        }
+
+        // Steering
+        if (keysDown['KeyA'] || keysDown['ArrowLeft']) {
+          steeringValue = Math.max(-1, steeringValue - KEY_STEERING_STEP);
+        } else if (keysDown['KeyD'] || keysDown['ArrowRight']) {
+          steeringValue = Math.min(1, steeringValue + KEY_STEERING_STEP);
+        } else {
+          if (Math.abs(steeringValue) < KEY_STEERING_STEP) steeringValue = 0;
+          else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
+        }
+
+        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue });
+        feedbackDiv.innerHTML =
+          `Throttle: ${throttleValue.toFixed(2)}<br>` +
+          `Steering: ${steeringValue.toFixed(2)}`;
+      }, 50);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (controlMode !== 'keyboard') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        throttleValue = 0;
+        steeringValue = 0;
+        socket.emit('fromclient', { throttle: 0, steering: 0 });
+        feedbackDiv.innerHTML = 'Throttle: 0.00<br>Steering: 0.00';
+        return;
+      }
+      if (!keysDown[e.code]) {
+        keysDown[e.code] = true;
+        startKeyboardLoop();
+      }
+      // Prevent page scrolling with arrow keys
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      delete keysDown[e.code];
+      if (Object.keys(keysDown).length === 0 && keyboardInterval) {
+        // Keep interval running briefly to allow decay
+      }
+    });
+
+    // --- Socket status ---
     socket.on('connect', () => {
-      statusDiv.textContent = 'Status: Connected';
+      statusDiv.textContent = `Status: Connected (${controlMode})`;
     });
 
     socket.on('disconnect', () => {
       statusDiv.textContent = 'Status: Disconnected';
     });
-
-    function handleOrientation(event) {
-      const betadeg = event.beta;
-      const gammadeg = event.gamma;
-
-      const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 30));
-      const steering = Math.max(-1, Math.min(1, gammadeg / 45));
-
-      socket.emit('fromclient', { throttle, steering });
-
-      feedbackDiv.innerHTML =
-        `Throttle: ${betadeg.toFixed(1)}° → ${throttle.toFixed(2)}<br>` +
-        `Steering: ${gammadeg.toFixed(1)}° → ${steering.toFixed(2)}`;
-    }
   </script>
 </body>
 </html>
