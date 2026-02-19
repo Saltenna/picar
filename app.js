@@ -29,9 +29,32 @@ const options = {
 let streamClients = [];
 let ffmpegProcess = null;
 
+// JPEG markers
+const JPEG_START = Buffer.from([0xFF, 0xD8]);
+const JPEG_END = Buffer.from([0xFF, 0xD9]);
+let jpegBuffer = Buffer.alloc(0);
+
+function broadcastFrame(frameData) {
+  const header = `--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${frameData.length}\r\n\r\n`;
+  for (let i = streamClients.length - 1; i >= 0; i--) {
+    const client = streamClients[i];
+    try {
+      if (!client.writableEnded) {
+        client.write(header);
+        client.write(frameData);
+        client.write('\r\n');
+      }
+    } catch (e) {
+      // Remove broken client
+      streamClients.splice(i, 1);
+    }
+  }
+}
+
 function startFFmpeg() {
   if (ffmpegProcess) return;
 
+  jpegBuffer = Buffer.alloc(0);
   console.log('Starting shared ffmpeg stream...');
   ffmpegProcess = spawn('ffmpeg', [
     '-f', 'v4l2',
@@ -39,30 +62,53 @@ function startFFmpeg() {
     '-video_size', '640x480',
     '-i', '/dev/video0',
     '-fflags', 'nobuffer',
+    '-flags', 'low_delay',
     '-f', 'mjpeg',
     '-q:v', '5',
     'pipe:1'
   ]);
 
   ffmpegProcess.stdout.on('data', (chunk) => {
-    const header = `--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${chunk.length}\r\n\r\n`;
-    for (let i = streamClients.length - 1; i >= 0; i--) {
-      const client = streamClients[i];
-      if (!client.writableEnded) {
-        client.write(header);
-        client.write(chunk);
-        client.write('\r\n');
+    // Accumulate data and extract complete JPEG frames
+    jpegBuffer = Buffer.concat([jpegBuffer, chunk]);
+
+    while (true) {
+      const startIdx = jpegBuffer.indexOf(JPEG_START);
+      if (startIdx === -1) {
+        // No JPEG start found, discard buffer
+        jpegBuffer = Buffer.alloc(0);
+        break;
       }
+      // Discard anything before the JPEG start
+      if (startIdx > 0) {
+        jpegBuffer = jpegBuffer.subarray(startIdx);
+      }
+
+      // Look for JPEG end marker (after the start)
+      const endIdx = jpegBuffer.indexOf(JPEG_END, 2);
+      if (endIdx === -1) {
+        // Incomplete frame, wait for more data
+        break;
+      }
+
+      // Extract complete frame (including the 2-byte end marker)
+      const frame = jpegBuffer.subarray(0, endIdx + 2);
+      broadcastFrame(frame);
+
+      // Remove this frame from the buffer
+      jpegBuffer = jpegBuffer.subarray(endIdx + 2);
     }
   });
 
   ffmpegProcess.stderr.on('data', (data) => {
-    // ffmpeg logs to stderr; ignore unless debugging
+    // ffmpeg logs to stderr; uncomment to debug:
+    // console.log('ffmpeg:', data.toString());
   });
 
   ffmpegProcess.on('close', (code) => {
     console.log(`ffmpeg exited with code ${code}`);
     ffmpegProcess = null;
+    jpegBuffer = Buffer.alloc(0);
     // If clients are still connected, restart
     if (streamClients.length > 0) {
       setTimeout(startFFmpeg, 1000);

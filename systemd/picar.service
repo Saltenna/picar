@@ -5,10 +5,14 @@ After=mavproxy.service
 
 [Service]
 ExecStart=/usr/bin/node /home/msundius/picar/app.js
+ExecStopPost=/usr/bin/killall -q ffmpeg || true
 WorkingDirectory=/home/msundius/picar
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStopSec=5
 #User=pi
 Environment=NODE_ENV=production
 
