@@ -433,8 +433,8 @@
       if (stopped) return;
       const betadeg = event.beta;
       const gammadeg = event.gamma;
-      const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 30));
-      const steering = Math.max(-1, Math.min(1, gammadeg / 45));
+      const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
+      const steering = Math.max(-1, Math.min(1, gammadeg / 25));
       socket.emit('fromclient', { throttle, steering });
       feedbackDiv.innerHTML =
         `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
