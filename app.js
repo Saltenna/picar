@@ -25,6 +25,64 @@ const options = {
   cert: fs.readFileSync('./certs/cert.pem'),
 };
 
+// --- Shared MJPEG stream (single ffmpeg process) ---
+let streamClients = [];
+let ffmpegProcess = null;
+
+function startFFmpeg() {
+  if (ffmpegProcess) return;
+
+  console.log('Starting shared ffmpeg stream...');
+  ffmpegProcess = spawn('ffmpeg', [
+    '-f', 'v4l2',
+    '-framerate', '15',
+    '-video_size', '640x480',
+    '-i', '/dev/video0',
+    '-fflags', 'nobuffer',
+    '-f', 'mjpeg',
+    '-q:v', '5',
+    'pipe:1'
+  ]);
+
+  ffmpegProcess.stdout.on('data', (chunk) => {
+    const header = `--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${chunk.length}\r\n\r\n`;
+    for (let i = streamClients.length - 1; i >= 0; i--) {
+      const client = streamClients[i];
+      if (!client.writableEnded) {
+        client.write(header);
+        client.write(chunk);
+        client.write('\r\n');
+      }
+    }
+  });
+
+  ffmpegProcess.stderr.on('data', (data) => {
+    // ffmpeg logs to stderr; ignore unless debugging
+  });
+
+  ffmpegProcess.on('close', (code) => {
+    console.log(`ffmpeg exited with code ${code}`);
+    ffmpegProcess = null;
+    // If clients are still connected, restart
+    if (streamClients.length > 0) {
+      setTimeout(startFFmpeg, 1000);
+    }
+  });
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('ffmpeg error:', err.message);
+    ffmpegProcess = null;
+  });
+}
+
+function stopFFmpegIfNoClients() {
+  if (streamClients.length === 0 && ffmpegProcess) {
+    console.log('No stream clients, stopping ffmpeg');
+    ffmpegProcess.kill('SIGTERM');
+    ffmpegProcess = null;
+  }
+}
+
 // Web UI + Socket Server + MJPEG Stream (port 8443)
 const appServer = https.createServer(options, (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -39,25 +97,17 @@ const appServer = https.createServer(options, (req, res) => {
       'Pragma': 'no-cache',
     });
 
-    const ffmpeg = spawn('ffmpeg', [
-      '-f', 'v4l2',
-      '-framerate', '15',
-      '-video_size', '640x480',
-      '-i', '/dev/video0',
-      '-fflags', 'nobuffer',
-      '-f', 'mjpeg',
-      'pipe:1'
-    ]);
-
-    ffmpeg.stdout.on('data', (chunk) => {
-      res.write(`--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${chunk.length}\r\n\r\n`);
-      res.write(chunk);
-      res.write('\r\n');
-    });
+    streamClients.push(res);
+    console.log(`Stream client connected (${streamClients.length} total)`);
 
     req.on('close', () => {
-      ffmpeg.kill('SIGTERM');
+      streamClients = streamClients.filter(c => c !== res);
+      console.log(`Stream client disconnected (${streamClients.length} remaining)`);
+      stopFFmpegIfNoClients();
     });
+
+    // Start ffmpeg if not already running
+    startFFmpeg();
   } else {
     file.serve(req, res);
   }
@@ -112,6 +162,7 @@ io.on('connection', (socket) => {
 process.on('SIGINT', function () {
   pwm.setServoPWM('throttle', pwm_neutral);
   pwm.setServoPWM('steering', pwm_neutral);
+  if (ffmpegProcess) ffmpegProcess.kill('SIGTERM');
   console.log('\nGracefully shutting down from SIGINT');
   process.exit();
 });
