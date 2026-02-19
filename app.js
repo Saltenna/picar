@@ -55,6 +55,9 @@ function startFFmpeg() {
   if (ffmpegProcess) return;
 
   jpegBuffer = Buffer.alloc(0);
+  let ffmpegStderr = '';
+  let gotFirstFrame = false;
+
   console.log('Starting shared ffmpeg stream...');
   ffmpegProcess = spawn('ffmpeg', [
     '-f', 'v4l2',
@@ -69,6 +72,10 @@ function startFFmpeg() {
   ]);
 
   ffmpegProcess.stdout.on('data', (chunk) => {
+    if (!gotFirstFrame) {
+      gotFirstFrame = true;
+      console.log('ffmpeg: first frame received, stream is live');
+    }
     // Accumulate data and extract complete JPEG frames
     jpegBuffer = Buffer.concat([jpegBuffer, chunk]);
 
@@ -101,22 +108,29 @@ function startFFmpeg() {
   });
 
   ffmpegProcess.stderr.on('data', (data) => {
-    // ffmpeg logs to stderr; uncomment to debug:
-    // console.log('ffmpeg:', data.toString());
+    const msg = data.toString();
+    ffmpegStderr += msg;
+    // Always log ffmpeg output for debugging
+    console.log('ffmpeg:', msg.trim());
   });
 
   ffmpegProcess.on('close', (code) => {
     console.log(`ffmpeg exited with code ${code}`);
+    if (code !== 0 && !gotFirstFrame) {
+      console.error('ffmpeg failed to produce any frames. Last stderr:\n' + ffmpegStderr.slice(-500));
+    }
     ffmpegProcess = null;
     jpegBuffer = Buffer.alloc(0);
-    // If clients are still connected, restart
+    // If clients are still connected, restart (with backoff)
     if (streamClients.length > 0) {
-      setTimeout(startFFmpeg, 1000);
+      const delay = gotFirstFrame ? 1000 : 5000;
+      console.log(`Restarting ffmpeg in ${delay}ms...`);
+      setTimeout(startFFmpeg, delay);
     }
   });
 
   ffmpegProcess.on('error', (err) => {
-    console.error('ffmpeg error:', err.message);
+    console.error('ffmpeg spawn error:', err.message);
     ffmpegProcess = null;
   });
 }

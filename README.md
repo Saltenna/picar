@@ -153,6 +153,8 @@ sudo chgrp gpio /dev/pigpio
 
 
 ### Network Configuration
+Ensure both devices are connected to the same network.
+
 To use your smartphone as a hotspot:
 
 - On your iPhone, enable the Personal Hotspot.
@@ -171,7 +173,7 @@ Open a browser and go to:
 ```
 https://<raspberry-pi-ip>:8443/socket.html
 ```
-To view  <u>just</u> the camera stream:
+To view <u>just</u> the camera stream:
 ```
 https://<raspberry-pi-ip>:8443/stream.mjpg
 ```
