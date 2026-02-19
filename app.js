@@ -129,31 +129,12 @@ function stopFFmpegIfNoClients() {
   }
 }
 
-// Web UI + Socket Server + MJPEG Stream (port 8443)
+// Web UI + Socket Server (port 8443)
 const appServer = https.createServer(options, (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   if (parsedUrl.pathname === '/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'OK', throttle: old_throttle, steering: old_steering }));
-  } else if (parsedUrl.pathname === '/stream.mjpg') {
-    res.writeHead(200, {
-      'Content-Type': 'multipart/x-mixed-replace; boundary=ffserver',
-      'Cache-Control': 'no-cache',
-      'Connection': 'close',
-      'Pragma': 'no-cache',
-    });
-
-    streamClients.push(res);
-    console.log(`Stream client connected (${streamClients.length} total)`);
-
-    req.on('close', () => {
-      streamClients = streamClients.filter(c => c !== res);
-      console.log(`Stream client disconnected (${streamClients.length} remaining)`);
-      stopFFmpegIfNoClients();
-    });
-
-    // Start ffmpeg if not already running
-    startFFmpeg();
   } else {
     file.serve(req, res);
   }
@@ -213,5 +194,46 @@ process.on('SIGINT', function () {
   process.exit();
 });
 
-console.log('MJPEG stream available at https://<ip>:8443/stream.mjpg');
+// --- MJPEG Stream Server (port 8081, separate from controls) ---
+const streamServer = https.createServer(options, (req, res) => {
+  if (req.url === '/stream.mjpg') {
+    res.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=ffserver',
+      'Cache-Control': 'no-cache',
+      'Connection': 'close',
+      'Pragma': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    streamClients.push(res);
+    console.log(`Stream client connected (${streamClients.length} total)`);
+
+    req.on('close', () => {
+      streamClients = streamClients.filter(c => c !== res);
+      console.log(`Stream client disconnected (${streamClients.length} remaining)`);
+      stopFFmpegIfNoClients();
+    });
+
+    startFFmpeg();
+  } else {
+    // Cert-acceptance landing page: user visits this once to trust the cert
+    res.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(`<!DOCTYPE html><html><body style="background:#111;color:#0f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+      <div style="text-align:center">
+        <h2>Stream Server Ready</h2>
+        <p>Certificate accepted. You can close this tab.</p>
+        <script>
+          if (window.opener) { window.opener.postMessage('stream-cert-ok', '*'); }
+          setTimeout(() => window.close(), 1500);
+        </script>
+      </div>
+    </body></html>`);
+  }
+});
+
+streamServer.listen(8081, '0.0.0.0');
+console.log('MJPEG stream available at https://<ip>:8081/stream.mjpg');
 

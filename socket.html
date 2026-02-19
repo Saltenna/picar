@@ -164,6 +164,33 @@
       margin: 0 2px;
       font-family: monospace;
     }
+
+    #streamOverlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      background: rgba(0,0,0,0.7);
+    }
+    #streamOverlay.hidden { display: none; }
+    #enableStreamBtn {
+      padding: 15px 30px;
+      font-size: 18px;
+      background: #2a7;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #streamStatus {
+      color: #aaa;
+      font-size: 14px;
+      margin-top: 10px;
+      text-align: center;
+    }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -193,6 +220,14 @@
     <div class="joystick-label">Steering</div>
   </div>
 
+  <!-- Stream certificate overlay -->
+  <div id="streamOverlay">
+    <div>
+      <button id="enableStreamBtn">Enable Video Stream</button>
+      <div id="streamStatus">Checking stream server...</div>
+    </div>
+  </div>
+
   <!-- Keyboard hint (desktop) -->
   <div id="keyboardHint">
     <kbd>W</kbd> / <kbd>↑</kbd> Forward &nbsp;
@@ -204,8 +239,8 @@
 
   <script>
     const hostname = window.location.hostname;
+    const streamBase = `https://${hostname}:8081`;
     const video = document.getElementById('live');
-    video.src = '/stream.mjpg';
 
     const socket = io(`https://${hostname}:8443`, { secure: true });
 
@@ -221,9 +256,65 @@
     const joystickRightEl = document.getElementById('joystickRight');
     const thumbLeft = document.getElementById('thumbLeft');
     const thumbRight = document.getElementById('thumbRight');
+    const streamOverlay = document.getElementById('streamOverlay');
+    const enableStreamBtn = document.getElementById('enableStreamBtn');
+    const streamStatusDiv = document.getElementById('streamStatus');
 
     let stopped = false;
     let wakeLock = null;
+
+    // --- Stream cert handling ---
+    function startStream() {
+      video.src = `${streamBase}/stream.mjpg`;
+      streamOverlay.classList.add('hidden');
+    }
+
+    function checkStreamCert() {
+      // Try to load a tiny request from the stream server.
+      // If cert is already accepted, this succeeds and we start the stream.
+      const img = new Image();
+      // Use a timestamp to bust cache
+      img.onload = () => {
+        streamStatusDiv.textContent = 'Stream server OK';
+        startStream();
+      };
+      img.onerror = () => {
+        // Cert not yet accepted — show the enable button
+        streamStatusDiv.textContent = 'Tap below to enable the video stream';
+        enableStreamBtn.style.display = 'inline-block';
+      };
+      // Attempt to fetch the landing page as an image (will fail but triggers cert check)
+      fetch(`${streamBase}/`, { mode: 'no-cors' })
+        .then(() => {
+          // If fetch succeeds without error, cert is accepted
+          startStream();
+        })
+        .catch(() => {
+          streamStatusDiv.textContent = 'Tap below to enable the video stream';
+          enableStreamBtn.style.display = 'inline-block';
+        });
+    }
+
+    enableStreamBtn.addEventListener('click', () => {
+      // Open stream server in a popup so user can accept the cert
+      streamStatusDiv.textContent = 'Accept the certificate in the popup...';
+      const popup = window.open(`${streamBase}/`, '_blank', 'width=400,height=300');
+      // Listen for message from popup confirming cert accepted
+      window.addEventListener('message', function onMsg(e) {
+        if (e.data === 'stream-cert-ok') {
+          window.removeEventListener('message', onMsg);
+          startStream();
+        }
+      });
+      // Fallback: check again after a few seconds in case postMessage didn't work
+      setTimeout(() => {
+        if (streamOverlay.classList.contains('hidden')) return;
+        startStream();
+      }, 5000);
+    });
+
+    // Check cert on page load
+    checkStreamCert();
 
     // --- Device detection ---
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
