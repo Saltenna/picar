@@ -58,16 +58,16 @@ function startFFmpeg() {
   let ffmpegStderr = '';
   let gotFirstFrame = false;
 
-  console.log('Starting shared ffmpeg stream...');
-  ffmpegProcess = spawn('ffmpeg', [
-    '-f', 'v4l2',
-    '-framerate', '15',
-    '-video_size', '640x480',
-    '-i', '/dev/video0',
-    '-fflags', 'nobuffer',
-    '-f', 'mjpeg',
-    '-q:v', '5',
-    'pipe:1'
+  console.log('Starting shared camera stream...');
+  ffmpegProcess = spawn('libcamera-vid', [
+    '--codec', 'mjpeg',
+    '--width', '640',
+    '--height', '480',
+    '--framerate', '15',
+    '--quality', '70',
+    '--nopreview',
+    '-t', '0',
+    '-o', '-'
   ]);
 
   ffmpegProcess.stdout.on('data', (chunk) => {
