@@ -115,14 +115,7 @@
   <script>
     const hostname = window.location.hostname;
     const video = document.getElementById('live');
-    fetch(`https://${hostname}:8081/stream.mjpg`, { method: 'GET' })
-      .then(() => {
-        video.src = `https://${hostname}:8081/stream.mjpg`;
-      })
-      .catch(err => {
-        console.warn('Stream preload failed:', err);
-        video.src = `https://${hostname}:8081/stream.mjpg`;
-      });
+    video.src = '/stream.mjpg';
 
     const socket = io(`https://${hostname}:8443`, { secure: true });
 
