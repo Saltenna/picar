@@ -5,7 +5,7 @@ After=mavproxy.service
 
 [Service]
 ExecStart=/usr/bin/node /opt/picar/app.js
-ExecStopPost=/usr/bin/killall -q ffmpeg libcamera-vid || true
+ExecStopPost=/usr/bin/killall -q ffmpeg libcamera-vid rpicam-vid || true
 WorkingDirectory=/opt/picar
 StandardOutput=inherit
 StandardError=inherit

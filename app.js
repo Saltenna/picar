@@ -59,7 +59,7 @@ function startFFmpeg() {
   let gotFirstFrame = false;
 
   console.log('Starting shared camera stream...');
-  ffmpegProcess = spawn('libcamera-vid', [
+  ffmpegProcess = spawn('rpicam-vid', [
     '--codec', 'mjpeg',
     '--width', '640',
     '--height', '480',
