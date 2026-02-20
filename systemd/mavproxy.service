@@ -8,10 +8,10 @@ StandardInput=null
 StandardOutput=journal
 StandardError=journal
 WorkingDirectory=/var/log/mavproxy
-ExecStart=/home/msundius/venv/mavproxy/bin/mavproxy.py \
+ExecStart=/opt/venvs/mavproxy/bin/mavproxy.py \
   --master=/dev/ttyACM0 \
   --baudrate 115200 \
-  --out=udpin:0.0.0.0:14550 \
+  --out=tcp:0.0.0.0:5760 \
   --non-interactive
 Restart=always
 
