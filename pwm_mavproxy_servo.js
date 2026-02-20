@@ -39,13 +39,11 @@ class PWMMavproxy {
   }
 
   scale(value) {
-    // value expected in normalized range (~0.105–0.175, neutral=0.14)
-    // convert proportionally into PWM µs (1000–2000, neutral=1500)
-    const pwm_mid = 0.14;
-    const pwm_half_range = 0.035; // 0.175 - 0.14 = 0.035
+    // Same as pigpio driver: value is roughly -1..1, map to PWM µs
+    // scale(0) = 1500 (neutral), scale(1) = 2000, scale(-1) = 1000
     const midpoint = (this.max_us + this.min_us) / 2;
     const range = (this.max_us - this.min_us) / 2;
-    return Math.round(midpoint + range * ((value - pwm_mid) / pwm_half_range));
+    return Math.round(midpoint + range * value);
   }
 
   setServoPWM(name, value) {
@@ -60,9 +58,16 @@ class PWMMavproxy {
 
   startLoop() {
     const period = 1000 / this.rate_hz;
+    let logCount = 0;
     this.interval = setInterval(() => {
       const pkt = this.buildRCOverride();
-      this.sock.send(pkt, this.port, this.host);
+      this.sock.send(pkt, this.port, this.host, (err) => {
+        if (err) console.error('UDP send error:', err.message);
+      });
+      logCount++;
+      if (logCount % (this.rate_hz * 5) === 1) { // Log every 5 seconds
+        console.log(`RC Override: ch1=${this.channels[0]} ch3=${this.channels[2]} → ${this.host}:${this.port}`);
+      }
     }, period);
   }
 
