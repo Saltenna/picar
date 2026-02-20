@@ -1,5 +1,6 @@
 // pwm_mavproxy_servo.js
 // Sends RC_CHANNELS_OVERRIDE to MAVProxy over TCP
+// Node acts as TCP SERVER, MAVProxy connects as client with --out=tcp:127.0.0.1:5760
 // Uses proper MAVLink v1 framing with CRC
 
 const net = require('net');
@@ -20,8 +21,7 @@ class PWMMavproxy {
     this.target_component = config.mavproxy_target_component || 1;
 
     this.seq = 0;
-    this.connected = false;
-    this.socket = null;
+    this.client = null;   // the connected MAVProxy client socket
 
     this.channels = new Uint16Array(8);
     this.channelMap = {
@@ -33,56 +33,63 @@ class PWMMavproxy {
     this.interval = null;
     this.heartbeatInterval = null;
 
-    console.log(`MAVProxy PWM driver: TCP to ${this.host}:${this.port}, ` +
+    console.log(`MAVProxy PWM driver: TCP server on ${this.host}:${this.port}, ` +
       `target sys=${this.target_system} comp=${this.target_component}, ${this.rate_hz}Hz`);
 
-    this.connect();
+    this.startServer();
   }
 
-  connect() {
-    if (this.socket) {
-      this.socket.removeAllListeners();
-      this.socket.destroy();
-    }
+  startServer() {
+    this.server = net.createServer((socket) => {
+      console.log(`MAVProxy connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
-    this.connected = false;
-    console.log(`Connecting to MAVProxy at ${this.host}:${this.port}...`);
-
-    this.socket = net.createConnection({ host: this.host, port: this.port }, () => {
-      console.log('Connected to MAVProxy via TCP');
-      this.connected = true;
+      // If we already have a client, replace it
+      if (this.client) {
+        console.log('Replacing previous MAVProxy connection');
+        this.client.removeAllListeners();
+        this.client.destroy();
+      }
+      this.client = socket;
       this.startHeartbeat();
       this.startLoop();
-    });
 
-    this.socket.on('data', (data) => {
-      // Parse for heartbeat responses (msg id 0)
-      for (let i = 0; i < data.length - 5; i++) {
-        if (data[i] === 0xFE && data[i + 5] === 0) {
-          console.log('MAVProxy: Received vehicle heartbeat');
-          break;
+      socket.on('data', (data) => {
+        for (let i = 0; i < data.length - 5; i++) {
+          if (data[i] === 0xFE && data[i + 5] === 0) {
+            console.log('MAVProxy: Received vehicle heartbeat');
+            break;
+          }
         }
-      }
+      });
+
+      socket.on('error', (err) => {
+        console.error('MAVProxy client error:', err.message);
+      });
+
+      socket.on('close', () => {
+        console.log('MAVProxy client disconnected');
+        if (this.client === socket) {
+          this.client = null;
+          if (this.interval) { clearInterval(this.interval); this.interval = null; }
+          if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
+        }
+      });
     });
 
-    this.socket.on('error', (err) => {
-      console.error('MAVProxy TCP error:', err.message);
-      this.connected = false;
+    this.server.on('error', (err) => {
+      console.error('MAVProxy TCP server error:', err.message);
     });
 
-    this.socket.on('close', () => {
-      console.log('MAVProxy TCP connection closed, reconnecting in 3s...');
-      this.connected = false;
-      if (this.interval) { clearInterval(this.interval); this.interval = null; }
-      if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
-      setTimeout(() => this.connect(), 3000);
+    this.server.listen(this.port, this.host, () => {
+      console.log(`MAVProxy TCP server listening on ${this.host}:${this.port}`);
+      console.log('Waiting for MAVProxy to connect...');
     });
   }
 
   sendPacket(buf) {
-    if (this.connected && this.socket && !this.socket.destroyed) {
+    if (this.client && !this.client.destroyed) {
       try {
-        this.socket.write(buf);
+        this.client.write(buf);
       } catch (e) {
         console.error('TCP write error:', e.message);
       }
@@ -145,7 +152,7 @@ class PWMMavproxy {
       this.sendPacket(this.buildRCOverride());
       logCount++;
       if (logCount % (this.rate_hz * 5) === 1) {
-        console.log(`RC Override: ch1=${this.channels[0]} ch3=${this.channels[2]} (TCP connected=${this.connected})`);
+        console.log(`RC Override: ch1=${this.channels[0]} ch3=${this.channels[2]} (client=${!!this.client})`);
       }
     }, period);
   }
