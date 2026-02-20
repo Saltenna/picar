@@ -3,7 +3,7 @@ Description=MAVProxy
 After=network.target
 
 [Service]
-User=pi
+User=saltenna
 StandardInput=null
 StandardOutput=journal
 StandardError=journal

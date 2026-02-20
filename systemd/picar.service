@@ -4,16 +4,16 @@ After=network.target
 After=mavproxy.service
 
 [Service]
-ExecStart=/usr/bin/node /home/msundius/picar/app.js
-ExecStopPost=/usr/bin/killall -q ffmpeg || true
-WorkingDirectory=/home/msundius/picar
+ExecStart=/usr/bin/node /opt/picar/app.js
+ExecStopPost=/usr/bin/killall -q ffmpeg libcamera-vid || true
+WorkingDirectory=/opt/picar
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
 KillMode=mixed
 KillSignal=SIGINT
 TimeoutStopSec=5
-#User=pi
+User=saltenna
 Environment=NODE_ENV=production
 
 [Install] 
