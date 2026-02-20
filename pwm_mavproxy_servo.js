@@ -31,10 +31,20 @@ class PWMMavproxy {
 
     this.rate_hz = config.mavproxy_rate_hz || 20;
     this.interval = null;
+    this.heartbeatInterval = null;
 
     console.log(`MAVProxy PWM driver: sending to ${this.host}:${this.port}, ` +
       `target sys=${this.target_system} comp=${this.target_component}, ${this.rate_hz}Hz`);
 
+    // Listen for responses from MAVProxy (for debugging)
+    this.sock.on('message', (msg, rinfo) => {
+      if (msg.length >= 6 && msg[0] === 0xFE && msg[5] === 0) {
+        // Got a heartbeat back from vehicle
+        console.log('MAVProxy: Received heartbeat from vehicle');
+      }
+    });
+
+    this.startHeartbeat();
     this.startLoop();
   }
 
@@ -54,6 +64,49 @@ class PWMMavproxy {
 
   clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
+  }
+
+  startHeartbeat() {
+    // Send GCS heartbeat every 1 second so MAVProxy registers us as a valid link
+    const sendHB = () => {
+      const pkt = this.buildHeartbeat();
+      this.sock.send(pkt, this.port, this.host, (err) => {
+        if (err) console.error('Heartbeat send error:', err.message);
+      });
+    };
+    sendHB(); // Send immediately
+    this.heartbeatInterval = setInterval(sendHB, 1000);
+  }
+
+  buildHeartbeat() {
+    // MAVLink v1 HEARTBEAT (msg id 0)
+    // Payload: custom_mode(4) + type(1) + autopilot(1) + base_mode(1) + system_status(1) + mavlink_version(1) = 9 bytes
+    const HEARTBEAT_CRC_EXTRA = 50;
+    const payloadLen = 9;
+    const buf = Buffer.alloc(6 + payloadLen + 2);
+
+    let i = 0;
+    buf[i++] = 0xFE;        // MAVLink v1 start
+    buf[i++] = payloadLen;   // payload length
+    buf[i++] = this.seq & 0xFF;
+    this.seq++;
+    buf[i++] = 255;          // system id (GCS)
+    buf[i++] = 0;            // component id
+    buf[i++] = 0;            // msg id (HEARTBEAT)
+
+    // Payload (wire order: largest fields first)
+    buf.writeUInt32LE(0, i); i += 4;  // custom_mode
+    buf[i++] = 6;            // type = MAV_TYPE_GCS
+    buf[i++] = 8;            // autopilot = MAV_AUTOPILOT_INVALID
+    buf[i++] = 0;            // base_mode
+    buf[i++] = 4;            // system_status = MAV_STATE_ACTIVE
+    buf[i++] = 3;            // mavlink_version
+
+    let crc = PWMMavproxy.crc16(buf.subarray(1, 6 + payloadLen), 5 + payloadLen);
+    crc = PWMMavproxy.crcAccumulate(HEARTBEAT_CRC_EXTRA, crc);
+    buf.writeUInt16LE(crc, 6 + payloadLen);
+
+    return buf;
   }
 
   startLoop() {
