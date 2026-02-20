@@ -202,7 +202,7 @@
   <button id="menuBtn">☰</button>
   <div id="commandMenu">
     <button id="stopBtn" onclick="toggleStop()">Stop (Neutral)</button>
-    <button onclick="disconnectStream()">Disconnect Stream</button>
+    <button onclick="refreshPage()">Refresh Page</button>
     <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
   </div>
 
@@ -400,8 +400,8 @@
       }
     }
 
-    function disconnectStream() {
-      video.src = '';
+    function refreshPage() {
+      window.location.reload();
     }
 
     // --- Orientation controls ---
