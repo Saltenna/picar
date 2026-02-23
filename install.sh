@@ -47,10 +47,10 @@ prompt_choice() {
   local default="$1"; shift
   local choices=("$@")
   local ans
-  echo "$prompt"
+  echo "$prompt" >&2
   local i=1
   for c in "${choices[@]}"; do
-    echo "  ${i}) ${c}"
+    echo "  ${i}) ${c}" >&2
     i=$((i+1))
   done
   while true; do
@@ -60,7 +60,7 @@ prompt_choice() {
       echo "${choices[$((ans-1))]}"
       return 0
     fi
-    echo "Invalid choice."
+    echo "Invalid choice." >&2
   done
 }
 
@@ -180,16 +180,16 @@ chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}" || true
 CFG="${REPO_DIR}/picar-cfg.json"
 if [[ -f "${CFG}" ]]; then
   say "Updating ${CFG} (pwm_method + placeholders)..."
-  python3 - <<PY
-import json, pathlib
-p = pathlib.Path("${CFG}")
+  python3 -c "
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
 cfg = json.loads(p.read_text())
-cfg["pwm_method"] = "${PWM_METHOD}"
-cfg["camera_type"] = "${CAMERA_TYPE}"
-cfg["use_mavproxy"] = ("${USE_MAVPROXY}" == "yes")
-p.write_text(json.dumps(cfg, indent=2) + "\n")
-print("Wrote", p)
-PY
+cfg['pwm_method'] = sys.argv[2]
+cfg['camera_type'] = sys.argv[3]
+cfg['use_mavproxy'] = (sys.argv[4] == 'yes')
+p.write_text(json.dumps(cfg, indent=2) + '\n')
+print('Wrote', p)
+" "${CFG}" "${PWM_METHOD}" "${CAMERA_TYPE}" "${USE_MAVPROXY}"
 else
   say "WARNING: ${CFG} not found; skipping config update."
 fi
