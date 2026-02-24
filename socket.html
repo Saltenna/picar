@@ -224,7 +224,7 @@
   <button id="enableBtn" style="display:none;">Enable Orientation</button>
   <button id="menuBtn">☰</button>
   <div id="commandMenu">
-    <button id="stopBtn" onclick="toggleStop()">Stop (Neutral)</button>
+    <button id="stopBtn" onclick="toggleStop()">Start</button>
     <button onclick="refreshPage()">Refresh Page</button>
     <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
   </div>
@@ -286,7 +286,7 @@
     const enableStreamBtn = document.getElementById('enableStreamBtn');
     const streamStatusDiv = document.getElementById('streamStatus');
 
-    let stopped = false;
+    let stopped = true;
     let wakeLock = null;
 
     // --- Stream cert handling ---
@@ -445,12 +445,20 @@
     // --- Stop / Disconnect ---
     function toggleStop() {
       if (!stopped) {
+        // STOP: disarm and send neutral
         socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
+        socket.emit('disarm');
         stopBtn.textContent = 'Start';
+        stopBtn.style.background = '#333';
         stopped = true;
+        statusDiv.textContent = 'Status: DISARMED';
       } else {
-        stopBtn.textContent = 'Stop (Neutral)';
+        // START: arm the vehicle
+        socket.emit('arm');
+        stopBtn.textContent = 'Stop';
+        stopBtn.style.background = '#a33';
         stopped = false;
+        statusDiv.textContent = 'Status: ARMED';
       }
     }
 

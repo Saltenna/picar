@@ -8,6 +8,12 @@ const net = require('net');
 const MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE = 70;
 const RC_OVERRIDE_CRC_EXTRA = 124;
 const HEARTBEAT_CRC_EXTRA = 50;
+const MAVLINK_MSG_ID_COMMAND_LONG = 76;
+const COMMAND_LONG_CRC_EXTRA = 152;
+
+// MAV_CMD values
+const MAV_CMD_COMPONENT_ARM_DISARM = 400;
+const MAV_CMD_DO_SET_MODE = 176;
 
 class PWMMavproxy {
   constructor(config) {
@@ -24,8 +30,11 @@ class PWMMavproxy {
     this.client = null;   // the connected MAVProxy client socket
 
     this.channels = new Uint16Array(8);
-    // Initialize shift channel to low gear (1000µs) so it's not 0 ("no override")
-    this.channels[1] = this.min_us;
+    // Initialize ALL channels to neutral so ArduPilot doesn't ignore them
+    // (0 = "no override" in MAVLink, which causes channels to be skipped)
+    this.channels[0] = this.neutral; // steering
+    this.channels[1] = this.min_us;  // shift (low gear)
+    this.channels[2] = this.neutral; // throttle
     this.channelMap = {
 
       throttle: 2, // RC channel 3 (0-indexed)
@@ -202,6 +211,59 @@ class PWMMavproxy {
     crc = PWMMavproxy.crcAccumulate(RC_OVERRIDE_CRC_EXTRA, crc);
     buf.writeUInt16LE(crc, 6 + payloadLen);
     return buf;
+  }
+
+  // Build MAVLink v1 COMMAND_LONG (msg id 76)
+  // Payload: param1-7 (7x float32) + command(uint16) + target_system(uint8) + target_component(uint8) + confirmation(uint8) = 33 bytes
+  buildCommandLong(command, param1 = 0, param2 = 0, param3 = 0, param4 = 0, param5 = 0, param6 = 0, param7 = 0) {
+    const payloadLen = 33;
+    const buf = Buffer.alloc(6 + payloadLen + 2);
+
+    let i = 0;
+    buf[i++] = 0xFE;
+    buf[i++] = payloadLen;
+    buf[i++] = this.seq & 0xFF; this.seq++;
+    buf[i++] = 255;  // sysid (GCS)
+    buf[i++] = 0;    // compid
+    buf[i++] = MAVLINK_MSG_ID_COMMAND_LONG;
+
+    // Payload (wire order: floats first, then uint16, then uint8s)
+    buf.writeFloatLE(param1, i); i += 4;
+    buf.writeFloatLE(param2, i); i += 4;
+    buf.writeFloatLE(param3, i); i += 4;
+    buf.writeFloatLE(param4, i); i += 4;
+    buf.writeFloatLE(param5, i); i += 4;
+    buf.writeFloatLE(param6, i); i += 4;
+    buf.writeFloatLE(param7, i); i += 4;
+    buf.writeUInt16LE(command, i); i += 2;
+    buf[i++] = this.target_system;
+    buf[i++] = this.target_component;
+    buf[i++] = 0; // confirmation
+
+    let crc = PWMMavproxy.crc16(buf.subarray(1, 6 + payloadLen), 5 + payloadLen);
+    crc = PWMMavproxy.crcAccumulate(COMMAND_LONG_CRC_EXTRA, crc);
+    buf.writeUInt16LE(crc, 6 + payloadLen);
+    return buf;
+  }
+
+  // Arm the vehicle and set MANUAL mode
+  arm() {
+    console.log('MAVProxy: Sending ARM + MANUAL mode...');
+    // Set mode to MANUAL (mode number 0 for ArduRover MANUAL)
+    // COMMAND_LONG MAV_CMD_DO_SET_MODE: param1=MAV_MODE_FLAG_CUSTOM_MODE_ENABLED(1), param2=custom_mode(0=MANUAL)
+    this.sendPacket(this.buildCommandLong(MAV_CMD_DO_SET_MODE, 1, 0));
+    // Arm: MAV_CMD_COMPONENT_ARM_DISARM param1=1 (arm), param2=21196 (force)
+    setTimeout(() => {
+      this.sendPacket(this.buildCommandLong(MAV_CMD_COMPONENT_ARM_DISARM, 1, 21196));
+      console.log('MAVProxy: ARM command sent');
+    }, 500);
+  }
+
+  // Disarm the vehicle
+  disarm() {
+    console.log('MAVProxy: Sending DISARM...');
+    // Disarm: param1=0 (disarm), param2=21196 (force)
+    this.sendPacket(this.buildCommandLong(MAV_CMD_COMPONENT_ARM_DISARM, 0, 21196));
   }
 }
 

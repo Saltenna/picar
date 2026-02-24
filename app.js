@@ -169,6 +169,17 @@ const throttle_ramp_down = 0.000;
 
 io.on('connection', (socket) => {
   console.log('Socket connected');
+
+  socket.on('arm', () => {
+    console.log('Client requested ARM');
+    if (typeof pwm.arm === 'function') pwm.arm();
+  });
+
+  socket.on('disarm', () => {
+    console.log('Client requested DISARM');
+    if (typeof pwm.disarm === 'function') pwm.disarm();
+  });
+
   socket.on('fromclient', (data) => {
     logcount++;
     old_throttle = data.throttle;
