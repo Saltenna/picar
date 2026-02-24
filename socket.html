@@ -244,7 +244,7 @@
   </div>
 
   <!-- Shift toggle -->
-  <button id="shiftBtn" onclick="toggleShift()">Gear: LOW</button>
+  <button id="shiftBtn">Gear: LOW</button>
 
   <!-- Stream certificate overlay -->
   <div id="streamOverlay">
@@ -365,11 +365,17 @@
       socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue });
     }
 
-    // Make shift button work during active touch (joystick)
-    document.getElementById('shiftBtn').addEventListener('touchstart', (e) => {
+    // Make shift button work during active touch (joystick) and on desktop
+    const shiftBtnEl = document.getElementById('shiftBtn');
+    shiftBtnEl.addEventListener('touchstart', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       toggleShift();
-    }, { passive: true });
+    }, { passive: false });
+    shiftBtnEl.addEventListener('click', (e) => {
+      // Only fire on non-touch (desktop) — touchstart already handled touch
+      if (!isTouchDevice) toggleShift();
+    });
 
     function activateControlMode(mode) {
       // Teardown previous mode
