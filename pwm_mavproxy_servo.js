@@ -24,8 +24,12 @@ class PWMMavproxy {
     this.client = null;   // the connected MAVProxy client socket
 
     this.channels = new Uint16Array(8);
+    // Initialize shift channel to low gear (1000µs) so it's not 0 ("no override")
+    this.channels[1] = this.min_us;
     this.channelMap = {
+
       throttle: 2, // RC channel 3 (0-indexed)
+      shift: 1,    // RC channel 2 (0-indexed)  
       steering: 0  // RC channel 1 (0-indexed)
     };
 
@@ -152,7 +156,7 @@ class PWMMavproxy {
       this.sendPacket(this.buildRCOverride());
       logCount++;
       if (logCount % (this.rate_hz * 5) === 1) {
-        console.log(`RC Override: ch1=${this.channels[0]} ch3=${this.channels[2]} (client=${!!this.client})`);
+        console.log(`RC Override: ch1=${this.channels[0]} ch2=${this.channels[1]} ch3=${this.channels[2]} (client=${!!this.client})`);
       }
     }, period);
   }

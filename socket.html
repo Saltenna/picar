@@ -361,7 +361,15 @@
         btn.textContent = 'Gear: LOW';
         btn.classList.remove('high');
       }
+      // Send immediately so shift takes effect without waiting for joystick/keyboard
+      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue });
     }
+
+    // Make shift button work during active touch (joystick)
+    document.getElementById('shiftBtn').addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      toggleShift();
+    }, { passive: true });
 
     function activateControlMode(mode) {
       // Teardown previous mode
@@ -626,6 +634,11 @@
         steeringValue = 0;
         socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
         feedbackDiv.innerHTML = `Throttle: 0.00<br>Steering: 0.00<br>Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
+        return;
+      }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        e.preventDefault();
+        toggleShift();
         return;
       }
       if (!keysDown[e.code]) {
