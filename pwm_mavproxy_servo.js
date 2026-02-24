@@ -35,11 +35,15 @@ class PWMMavproxy {
     this.channels[0] = this.neutral; // steering
     this.channels[1] = this.min_us;  // shift (low gear)
     this.channels[2] = this.neutral; // throttle
+    this.channels[3] = this.min_us;  // front t-lock (unlocked)
+    this.channels[4] = this.min_us;  // rear t-lock (unlocked)
     this.channelMap = {
 
-      throttle: 2, // RC channel 3 (0-indexed)
-      shift: 1,    // RC channel 2 (0-indexed)  
-      steering: 0  // RC channel 1 (0-indexed)
+      throttle: 2,   // RC channel 3 (0-indexed)
+      shift: 1,      // RC channel 2 (0-indexed)
+      steering: 0,   // RC channel 1 (0-indexed)
+      tlock_front: 3, // RC channel 4 (0-indexed)
+      tlock_rear: 4   // RC channel 5 (0-indexed)
     };
 
     this.rate_hz = config.mavproxy_rate_hz || 20;

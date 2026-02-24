@@ -165,11 +165,9 @@
       font-family: monospace;
     }
 
-    #shiftBtn {
+    #shiftBtn, .tlock-btn {
       position: fixed;
       bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
       padding: 10px 20px;
       font-size: 16px;
       font-weight: bold;
@@ -182,10 +180,25 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    #shiftBtn {
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    #tlockFrontBtn {
+      left: 10px;
+    }
+    #tlockRearBtn {
+      right: 10px;
+    }
     #shiftBtn.high {
       background: rgba(0, 160, 80, 0.8);
       color: white;
       border-color: #0a6;
+    }
+    .tlock-btn.locked {
+      background: rgba(200, 120, 0, 0.8);
+      color: white;
+      border-color: #c80;
     }
 
     #streamOverlay {
@@ -245,6 +258,10 @@
 
   <!-- Shift toggle -->
   <button id="shiftBtn">Gear: LOW</button>
+
+  <!-- T-Lock diff toggles -->
+  <button id="tlockFrontBtn" class="tlock-btn">Front: Open</button>
+  <button id="tlockRearBtn" class="tlock-btn">Rear: Open</button>
 
   <!-- Stream certificate overlay -->
   <div id="streamOverlay">
@@ -349,6 +366,8 @@
     let throttleValue = 0;
     let steeringValue = 0;
     let shiftValue = -1; // -1 = low gear, 1 = high gear
+    let tlockFrontValue = -1; // -1 = open, 1 = locked
+    let tlockRearValue = -1;  // -1 = open, 1 = locked
 
     function toggleShift() {
       const btn = document.getElementById('shiftBtn');
@@ -362,7 +381,35 @@
         btn.classList.remove('high');
       }
       // Send immediately so shift takes effect without waiting for joystick/keyboard
-      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue });
+      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+    }
+
+    function toggleTlockFront() {
+      const btn = document.getElementById('tlockFrontBtn');
+      if (tlockFrontValue < 0) {
+        tlockFrontValue = 1;
+        btn.textContent = 'Front: Locked';
+        btn.classList.add('locked');
+      } else {
+        tlockFrontValue = -1;
+        btn.textContent = 'Front: Open';
+        btn.classList.remove('locked');
+      }
+      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+    }
+
+    function toggleTlockRear() {
+      const btn = document.getElementById('tlockRearBtn');
+      if (tlockRearValue < 0) {
+        tlockRearValue = 1;
+        btn.textContent = 'Rear: Locked';
+        btn.classList.add('locked');
+      } else {
+        tlockRearValue = -1;
+        btn.textContent = 'Rear: Open';
+        btn.classList.remove('locked');
+      }
+      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
     }
 
     // Make shift button work during active touch (joystick) and on desktop
@@ -373,8 +420,28 @@
       toggleShift();
     }, { passive: false });
     shiftBtnEl.addEventListener('click', (e) => {
-      // Only fire on non-touch (desktop) — touchstart already handled touch
       if (!isTouchDevice) toggleShift();
+    });
+
+    // T-lock button handlers
+    const tlockFrontBtnEl = document.getElementById('tlockFrontBtn');
+    tlockFrontBtnEl.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTlockFront();
+    }, { passive: false });
+    tlockFrontBtnEl.addEventListener('click', (e) => {
+      if (!isTouchDevice) toggleTlockFront();
+    });
+
+    const tlockRearBtnEl = document.getElementById('tlockRearBtn');
+    tlockRearBtnEl.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTlockRear();
+    }, { passive: false });
+    tlockRearBtnEl.addEventListener('click', (e) => {
+      if (!isTouchDevice) toggleTlockRear();
     });
 
     function activateControlMode(mode) {
@@ -446,7 +513,7 @@
     function toggleStop() {
       if (!stopped) {
         // STOP: disarm and send neutral
-        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
+        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         socket.emit('disarm');
         stopBtn.textContent = 'Start';
         stopBtn.style.background = '#333';
@@ -497,7 +564,7 @@
       const gammadeg = event.gamma;
       const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
       const steering = Math.max(-1, Math.min(1, gammadeg / 25));
-      socket.emit('fromclient', { throttle, steering, shift: shiftValue });
+      socket.emit('fromclient', { throttle, steering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
       feedbackDiv.innerHTML =
         `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
         `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}<br>` +
@@ -590,7 +657,7 @@
       if (joystickSendInterval) return;
       joystickSendInterval = setTimeout(() => {
         joystickSendInterval = null;
-        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue });
+        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${steeringValue.toFixed(2)}`;
@@ -632,7 +699,7 @@
           else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
         }
 
-        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue });
+        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${steeringValue.toFixed(2)}<br>` +
@@ -646,7 +713,7 @@
         e.preventDefault();
         throttleValue = 0;
         steeringValue = 0;
-        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
+        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML = `Throttle: 0.00<br>Steering: 0.00<br>Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
         return;
       }

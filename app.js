@@ -203,6 +203,12 @@ io.on('connection', (socket) => {
     if (data.shift !== undefined) {
       pwm.setServoPWM('shift', data.shift);          // RC2 for 2-speed transmission
     }
+    if (data.tlock_front !== undefined) {
+      pwm.setServoPWM('tlock_front', data.tlock_front); // RC4 for front t-lock diff
+    }
+    if (data.tlock_rear !== undefined) {
+      pwm.setServoPWM('tlock_rear', data.tlock_rear);   // RC5 for rear t-lock diff
+    }
 
     clearInterval(lastAction);
     lastAction = setInterval(() => {
