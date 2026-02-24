@@ -33,9 +33,9 @@ class PWMMavproxy {
     // Initialize ALL channels to neutral so ArduPilot doesn't ignore them
     // (0 = "no override" in MAVLink, which causes channels to be skipped)
     this.channels[0] = this.neutral; // steering
-    this.channels[1] = this.min_us;  // shift (low gear)
+    this.channels[1] = this.max_us;  // shift (low gear - wiring reversed)
     this.channels[2] = this.neutral; // throttle
-    this.channels[3] = this.min_us;  // front t-lock (unlocked)
+    this.channels[3] = this.max_us;  // front t-lock (unlocked - wiring reversed)
     this.channels[4] = this.min_us;  // rear t-lock (unlocked)
     this.channelMap = {
 

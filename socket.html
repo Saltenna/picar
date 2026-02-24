@@ -365,18 +365,18 @@
     let controlMode = isTouchDevice ? 'joystick' : 'keyboard';
     let throttleValue = 0;
     let steeringValue = 0;
-    let shiftValue = -1; // -1 = low gear, 1 = high gear
-    let tlockFrontValue = -1; // -1 = open, 1 = locked
+    let shiftValue = 1; // 1 = low gear, -1 = high gear (wiring reversed)
+    let tlockFrontValue = 1; // 1 = open, -1 = locked (wiring reversed)
     let tlockRearValue = -1;  // -1 = open, 1 = locked
 
     function toggleShift() {
       const btn = document.getElementById('shiftBtn');
-      if (shiftValue < 0) {
-        shiftValue = 1;
+      if (shiftValue > 0) {
+        shiftValue = -1;
         btn.textContent = 'Gear: HIGH';
         btn.classList.add('high');
       } else {
-        shiftValue = -1;
+        shiftValue = 1;
         btn.textContent = 'Gear: LOW';
         btn.classList.remove('high');
       }
@@ -386,12 +386,12 @@
 
     function toggleTlockFront() {
       const btn = document.getElementById('tlockFrontBtn');
-      if (tlockFrontValue < 0) {
-        tlockFrontValue = 1;
+      if (tlockFrontValue > 0) {
+        tlockFrontValue = -1;
         btn.textContent = 'Front: Locked';
         btn.classList.add('locked');
       } else {
-        tlockFrontValue = -1;
+        tlockFrontValue = 1;
         btn.textContent = 'Front: Open';
         btn.classList.remove('locked');
       }
