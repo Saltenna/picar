@@ -203,7 +203,7 @@ if [[ "${USE_MAVPROXY}" == "yes" ]]; then
 
   python3 -m venv /opt/venvs/mavproxy
   /opt/venvs/mavproxy/bin/pip install --upgrade pip wheel
-  /opt/venvs/mavproxy/bin/pip install --upgrade MAVProxy pyserial
+  /opt/venvs/mavproxy/bin/pip install --upgrade MAVProxy pyserial future
 fi
 
 # systemd install with templating of User=

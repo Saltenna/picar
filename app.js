@@ -189,6 +189,9 @@ io.on('connection', (socket) => {
 
     pwm.setServoPWM('throttle', smoothed_throttle); // PWM0 for throttle
     pwm.setServoPWM('steering', data.steering);     // PWM1 for steering
+    if (data.shift !== undefined) {
+      pwm.setServoPWM('shift', data.shift);          // RC2 for 2-speed transmission
+    }
 
     clearInterval(lastAction);
     lastAction = setInterval(() => {

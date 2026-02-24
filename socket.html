@@ -165,6 +165,29 @@
       font-family: monospace;
     }
 
+    #shiftBtn {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      background: rgba(50, 50, 50, 0.8);
+      color: #aaa;
+      border: 2px solid #555;
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 600;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #shiftBtn.high {
+      background: rgba(0, 160, 80, 0.8);
+      color: white;
+      border-color: #0a6;
+    }
+
     #streamOverlay {
       position: fixed;
       top: 0; left: 0;
@@ -219,6 +242,9 @@
     </div>
     <div class="joystick-label">Steering</div>
   </div>
+
+  <!-- Shift toggle -->
+  <button id="shiftBtn" onclick="toggleShift()">Gear: LOW</button>
 
   <!-- Stream certificate overlay -->
   <div id="streamOverlay">
@@ -322,6 +348,20 @@
     let controlMode = isTouchDevice ? 'joystick' : 'keyboard';
     let throttleValue = 0;
     let steeringValue = 0;
+    let shiftValue = -1; // -1 = low gear, 1 = high gear
+
+    function toggleShift() {
+      const btn = document.getElementById('shiftBtn');
+      if (shiftValue < 0) {
+        shiftValue = 1;
+        btn.textContent = 'Gear: HIGH';
+        btn.classList.add('high');
+      } else {
+        shiftValue = -1;
+        btn.textContent = 'Gear: LOW';
+        btn.classList.remove('high');
+      }
+    }
 
     function activateControlMode(mode) {
       // Teardown previous mode
@@ -391,7 +431,7 @@
     // --- Stop / Disconnect ---
     function toggleStop() {
       if (!stopped) {
-        socket.emit('fromclient', { throttle: 0, steering: 0 });
+        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
         stopBtn.textContent = 'Start';
         stopped = true;
       } else {
@@ -435,10 +475,11 @@
       const gammadeg = event.gamma;
       const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
       const steering = Math.max(-1, Math.min(1, gammadeg / 25));
-      socket.emit('fromclient', { throttle, steering });
+      socket.emit('fromclient', { throttle, steering, shift: shiftValue });
       feedbackDiv.innerHTML =
         `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
-        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}`;
+        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}<br>` +
+        `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
     }
 
     // --- Virtual joystick controls (touch) ---
@@ -569,10 +610,11 @@
           else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
         }
 
-        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue });
+        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
-          `Steering: ${steeringValue.toFixed(2)}`;
+          `Steering: ${steeringValue.toFixed(2)}<br>` +
+          `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
       }, 50);
     }
 
@@ -582,8 +624,8 @@
         e.preventDefault();
         throttleValue = 0;
         steeringValue = 0;
-        socket.emit('fromclient', { throttle: 0, steering: 0 });
-        feedbackDiv.innerHTML = 'Throttle: 0.00<br>Steering: 0.00';
+        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue });
+        feedbackDiv.innerHTML = `Throttle: 0.00<br>Steering: 0.00<br>Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
         return;
       }
       if (!keysDown[e.code]) {
