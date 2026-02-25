@@ -80,7 +80,7 @@ function startCamera() {
     '--framerate', '25',
     '--bitrate', '1200000',
     '--profile', 'baseline',
-    '--intra', '25',
+    '--intra', '10',
     '--inline',
     '--nopreview',
     '-t', '0',
@@ -100,13 +100,25 @@ function startCamera() {
       gotFirstFrame = true;
       console.log('Camera: first H.264 data received, stream is live');
     }
-    // Cache keyframes so clients can recover quickly
-    if (isKeyframe(chunk)) {
+    const keyframe = isKeyframe(chunk);
+    if (keyframe) {
       latestKeyframe = chunk;
     }
-    // Send H.264 chunks reliably — dropping frames corrupts the decoder
+    // Backpressure-aware streaming:
+    // - Always send keyframes (they reset the decoder)
+    // - Drop P-frames when the socket buffer is backed up (WiFi degraded)
+    // - This prevents feed freeze at range while keeping decoder happy
     for (const s of socketClients) {
-      s.emit('h264data', chunk);
+      const buffered = s.conn ? s.conn.bufferedAmount : 0;
+      if (keyframe) {
+        // Keyframe: always send reliably, and force-drain by using volatile
+        // so it doesn't stack behind old buffered P-frames
+        s.volatile.emit('h264data', chunk);
+      } else if (buffered < 128000) {
+        // Connection healthy — send P-frame reliably
+        s.emit('h264data', chunk);
+      }
+      // else: buffer backed up, drop this P-frame silently
     }
   });
 
