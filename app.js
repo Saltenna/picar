@@ -77,8 +77,8 @@ function startCamera() {
     '--codec', 'h264',
     '--width', '640',
     '--height', '480',
-    '--framerate', '25',
-    '--bitrate', '1200000',
+    '--framerate', '20',
+    '--bitrate', '600000',
     '--profile', 'baseline',
     '--intra', '10',
     '--inline',
@@ -104,21 +104,11 @@ function startCamera() {
     if (keyframe) {
       latestKeyframe = chunk;
     }
-    // Backpressure-aware streaming:
-    // - Always send keyframes (they reset the decoder)
-    // - Drop P-frames when the socket buffer is backed up (WiFi degraded)
-    // - This prevents feed freeze at range while keeping decoder happy
+    // volatile.emit: always send latest frame, drop if socket can't keep up.
+    // Keeps the feed current — an RC car needs "now" not "smooth".
+    // Dropped P-frames cause brief glitches that self-heal at next keyframe (~500ms).
     for (const s of socketClients) {
-      const buffered = s.conn ? s.conn.bufferedAmount : 0;
-      if (keyframe) {
-        // Keyframe: always send reliably, and force-drain by using volatile
-        // so it doesn't stack behind old buffered P-frames
-        s.volatile.emit('h264data', chunk);
-      } else if (buffered < 128000) {
-        // Connection healthy — send P-frame reliably
-        s.emit('h264data', chunk);
-      }
-      // else: buffer backed up, drop this P-frame silently
+      s.volatile.emit('h264data', chunk);
     }
   });
 
