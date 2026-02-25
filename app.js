@@ -53,8 +53,7 @@ function startCamera() {
 
   let gotFirstFrame = false;
 
-  console.log(`Starting H.264 camera stream via ${cameraCmd}...`);
-  ffmpegProcess = spawn(cameraCmd, [
+  const cameraArgs = [
     '--codec', 'h264',
     '--width', '640',
     '--height', '480',
@@ -66,7 +65,15 @@ function startCamera() {
     '--nopreview',
     '-t', '0',
     '-o', '-'
-  ]);
+  ];
+
+  // rpicam-vid (Pi 5) uses libav backend and needs explicit format for stdout
+  if (cameraCmd === 'rpicam-vid') {
+    cameraArgs.push('--libav-format', 'h264');
+  }
+
+  console.log(`Starting H.264 camera stream via ${cameraCmd}...`);
+  ffmpegProcess = spawn(cameraCmd, cameraArgs);
 
   ffmpegProcess.stdout.on('data', (chunk) => {
     if (!gotFirstFrame) {
