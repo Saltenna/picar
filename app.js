@@ -28,6 +28,26 @@ const options = {
 // --- Shared H.264 stream (single camera process, streamed via socket.io) ---
 let ffmpegProcess = null;
 let socketClients = new Set();
+let latestKeyframe = null;  // cache last keyframe so new/recovering clients start clean
+
+// H.264 NAL unit type detection (first byte after start code & 0x1f)
+function isKeyframe(buf) {
+  // Look for NAL start code (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01)
+  for (let i = 0; i < buf.length - 4; i++) {
+    if (buf[i] === 0 && buf[i+1] === 0) {
+      let nalStart;
+      if (buf[i+2] === 0 && buf[i+3] === 1) nalStart = i + 4;
+      else if (buf[i+2] === 1) nalStart = i + 3;
+      else continue;
+      if (nalStart < buf.length) {
+        const nalType = buf[nalStart] & 0x1f;
+        // 5 = IDR (keyframe), 7 = SPS, 8 = PPS (--inline sends these before IDR)
+        if (nalType === 5 || nalType === 7) return true;
+      }
+    }
+  }
+  return false;
+}
 
 // Auto-detect camera command: rpicam-vid (Pi 5+) or libcamera-vid (Pi 4)
 let cameraCmd = null;
@@ -57,10 +77,10 @@ function startCamera() {
     '--codec', 'h264',
     '--width', '640',
     '--height', '480',
-    '--framerate', '15',
-    '--bitrate', '800000',
+    '--framerate', '25',
+    '--bitrate', '1500000',
     '--profile', 'baseline',
-    '--intra', '15',
+    '--intra', '3',
     '--inline',
     '--nopreview',
     '-t', '0',
@@ -80,7 +100,11 @@ function startCamera() {
       gotFirstFrame = true;
       console.log('Camera: first H.264 data received, stream is live');
     }
-    // Send H.264 chunks to all connected clients (volatile = drop if can't keep up)
+    // Cache keyframes so clients can recover quickly
+    if (isKeyframe(chunk)) {
+      latestKeyframe = chunk;
+    }
+    // Send H.264 chunks to all connected clients
     for (const s of socketClients) {
       s.volatile.emit('h264data', chunk);
     }
@@ -144,6 +168,10 @@ io.on('connection', (socket) => {
   console.log('Socket connected');
   socketClients.add(socket);
   startCamera();
+  // Send cached keyframe so client can decode immediately
+  if (latestKeyframe) {
+    socket.emit('h264data', latestKeyframe);
+  }
 
   socket.on('disconnect', () => {
     console.log('Socket disconnected');
