@@ -4,7 +4,7 @@ const https = require('https');
 const { Server } = require('socket.io');
 const url = require('url');
 const static = require('node-static');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 const path = require('path');
 const configPath = path.join(__dirname, 'picar-cfg.json');
@@ -25,46 +25,44 @@ const options = {
   cert: fs.readFileSync('./certs/cert.pem'),
 };
 
-// --- Shared MJPEG stream (single ffmpeg process) ---
-let streamClients = [];
+// --- Shared H.264 stream (single camera process, streamed via socket.io) ---
 let ffmpegProcess = null;
+let socketClients = new Set();
 
-// JPEG markers
-const JPEG_START = Buffer.from([0xFF, 0xD8]);
-const JPEG_END = Buffer.from([0xFF, 0xD9]);
-let jpegBuffer = Buffer.alloc(0);
-
-function broadcastFrame(frameData) {
-  const header = `--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${frameData.length}\r\n\r\n`;
-  for (let i = streamClients.length - 1; i >= 0; i--) {
-    const client = streamClients[i];
-    try {
-      if (!client.writableEnded) {
-        client.write(header);
-        client.write(frameData);
-        client.write('\r\n');
-      }
-    } catch (e) {
-      // Remove broken client
-      streamClients.splice(i, 1);
-    }
-  }
+// Auto-detect camera command: rpicam-vid (Pi 5+) or libcamera-vid (Pi 4)
+let cameraCmd = null;
+for (const cmd of ['rpicam-vid', 'libcamera-vid']) {
+  try {
+    execSync(`which ${cmd}`, { stdio: 'ignore' });
+    cameraCmd = cmd;
+    break;
+  } catch (_) {}
 }
+if (!cameraCmd) {
+  console.error('Neither rpicam-vid nor libcamera-vid found on this system');
+  // Will fail gracefully when startCamera() is called
+}
+console.log(`Camera command: ${cameraCmd || '(none found)'}`);
 
-function startFFmpeg() {
+function startCamera() {
   if (ffmpegProcess) return;
+  if (!cameraCmd) {
+    console.error('No camera command available, cannot start stream');
+    return;
+  }
 
-  jpegBuffer = Buffer.alloc(0);
-  let ffmpegStderr = '';
   let gotFirstFrame = false;
 
-  console.log('Starting shared camera stream...');
-  ffmpegProcess = spawn('libcamera-vid', [
-    '--codec', 'mjpeg',
+  console.log(`Starting H.264 camera stream via ${cameraCmd}...`);
+  ffmpegProcess = spawn(cameraCmd, [
+    '--codec', 'h264',
     '--width', '640',
     '--height', '480',
     '--framerate', '15',
-    '--quality', '70',
+    '--bitrate', '800000',
+    '--profile', 'baseline',
+    '--intra', '15',
+    '--inline',
     '--nopreview',
     '-t', '0',
     '-o', '-'
@@ -73,70 +71,38 @@ function startFFmpeg() {
   ffmpegProcess.stdout.on('data', (chunk) => {
     if (!gotFirstFrame) {
       gotFirstFrame = true;
-      console.log('ffmpeg: first frame received, stream is live');
+      console.log('Camera: first H.264 data received, stream is live');
     }
-    // Accumulate data and extract complete JPEG frames
-    jpegBuffer = Buffer.concat([jpegBuffer, chunk]);
-
-    while (true) {
-      const startIdx = jpegBuffer.indexOf(JPEG_START);
-      if (startIdx === -1) {
-        // No JPEG start found, discard buffer
-        jpegBuffer = Buffer.alloc(0);
-        break;
-      }
-      // Discard anything before the JPEG start
-      if (startIdx > 0) {
-        jpegBuffer = jpegBuffer.subarray(startIdx);
-      }
-
-      // Look for JPEG end marker (after the start)
-      const endIdx = jpegBuffer.indexOf(JPEG_END, 2);
-      if (endIdx === -1) {
-        // Incomplete frame, wait for more data
-        break;
-      }
-
-      // Extract complete frame (including the 2-byte end marker)
-      const frame = jpegBuffer.subarray(0, endIdx + 2);
-      broadcastFrame(frame);
-
-      // Remove this frame from the buffer
-      jpegBuffer = jpegBuffer.subarray(endIdx + 2);
+    // Send H.264 chunks to all connected clients (volatile = drop if can't keep up)
+    for (const s of socketClients) {
+      s.volatile.emit('h264data', chunk);
     }
   });
 
   ffmpegProcess.stderr.on('data', (data) => {
-    const msg = data.toString();
-    ffmpegStderr += msg;
-    // Always log ffmpeg output for debugging
-    console.log('ffmpeg:', msg.trim());
+    console.log('camera:', data.toString().trim());
   });
 
   ffmpegProcess.on('close', (code) => {
-    console.log(`ffmpeg exited with code ${code}`);
-    if (code !== 0 && !gotFirstFrame) {
-      console.error('ffmpeg failed to produce any frames. Last stderr:\n' + ffmpegStderr.slice(-500));
-    }
+    console.log(`Camera exited with code ${code}`);
     ffmpegProcess = null;
-    jpegBuffer = Buffer.alloc(0);
-    // If clients are still connected, restart (with backoff)
-    if (streamClients.length > 0) {
+    // Restart if clients still connected
+    if (socketClients.size > 0) {
       const delay = gotFirstFrame ? 1000 : 5000;
-      console.log(`Restarting ffmpeg in ${delay}ms...`);
-      setTimeout(startFFmpeg, delay);
+      console.log(`Restarting camera in ${delay}ms...`);
+      setTimeout(startCamera, delay);
     }
   });
 
   ffmpegProcess.on('error', (err) => {
-    console.error('ffmpeg spawn error:', err.message);
+    console.error('Camera spawn error:', err.message);
     ffmpegProcess = null;
   });
 }
 
-function stopFFmpegIfNoClients() {
-  if (streamClients.length === 0 && ffmpegProcess) {
-    console.log('No stream clients, stopping ffmpeg');
+function stopCameraIfNoClients() {
+  if (socketClients.size === 0 && ffmpegProcess) {
+    console.log('No clients connected, stopping camera');
     ffmpegProcess.kill('SIGTERM');
     ffmpegProcess = null;
   }
@@ -169,6 +135,15 @@ const throttle_ramp_down = 0.000;
 
 io.on('connection', (socket) => {
   console.log('Socket connected');
+  socketClients.add(socket);
+  startCamera();
+
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected');
+    socketClients.delete(socket);
+    stopCameraIfNoClients();
+  });
+
   socket.on('fromclient', (data) => {
     logcount++;
     old_throttle = data.throttle;
@@ -207,46 +182,5 @@ process.on('SIGINT', function () {
   process.exit();
 });
 
-// --- MJPEG Stream Server (port 8081, separate from controls) ---
-const streamServer = https.createServer(options, (req, res) => {
-  if (req.url === '/stream.mjpg') {
-    res.writeHead(200, {
-      'Content-Type': 'multipart/x-mixed-replace; boundary=ffserver',
-      'Cache-Control': 'no-cache',
-      'Connection': 'close',
-      'Pragma': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    });
-
-    streamClients.push(res);
-    console.log(`Stream client connected (${streamClients.length} total)`);
-
-    req.on('close', () => {
-      streamClients = streamClients.filter(c => c !== res);
-      console.log(`Stream client disconnected (${streamClients.length} remaining)`);
-      stopFFmpegIfNoClients();
-    });
-
-    startFFmpeg();
-  } else {
-    // Cert-acceptance landing page: user visits this once to trust the cert
-    res.writeHead(200, {
-      'Content-Type': 'text/html',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(`<!DOCTYPE html><html><body style="background:#111;color:#0f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-      <div style="text-align:center">
-        <h2>Stream Server Ready</h2>
-        <p>Certificate accepted. You can close this tab.</p>
-        <script>
-          if (window.opener) { window.opener.postMessage('stream-cert-ok', '*'); }
-          setTimeout(() => window.close(), 1500);
-        </script>
-      </div>
-    </body></html>`);
-  }
-});
-
-streamServer.listen(8081, '0.0.0.0');
-console.log('MJPEG stream available at https://<ip>:8081/stream.mjpg');
+console.log('H.264 stream will start when a client connects via socket.io');
 
