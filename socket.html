@@ -200,38 +200,12 @@
       color: white;
       border-color: #c80;
     }
-
-    #streamOverlay {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      background: rgba(0,0,0,0.7);
-    }
-    #streamOverlay.hidden { display: none; }
-    #enableStreamBtn {
-      padding: 15px 30px;
-      font-size: 18px;
-      background: #2a7;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    #streamStatus {
-      color: #aaa;
-      font-size: 14px;
-      margin-top: 10px;
-      text-align: center;
-    }
   </style>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/jmuxer.min.js"></script>
 </head>
 <body>
-  <img id="live" src="" alt="Video stream not available">
+  <video id="live" autoplay muted playsinline></video>
   <div id="status">Status: Connecting...</div>
   <div id="feedback">Throttle: --<br>Steering: --</div>
   <button id="enableBtn" style="display:none;">Enable Orientation</button>
@@ -263,13 +237,7 @@
   <button id="tlockFrontBtn" class="tlock-btn">Front: Open</button>
   <button id="tlockRearBtn" class="tlock-btn">Rear: Open</button>
 
-  <!-- Stream certificate overlay -->
-  <div id="streamOverlay">
-    <div>
-      <button id="enableStreamBtn">Enable Video Stream</button>
-      <div id="streamStatus">Checking stream server...</div>
-    </div>
-  </div>
+  <!-- Stream overlay removed — H.264 streams via socket.io now -->
 
   <!-- Keyboard hint (desktop) -->
   <div id="keyboardHint">
@@ -282,10 +250,22 @@
 
   <script>
     const hostname = window.location.hostname;
-    const streamBase = `https://${hostname}:8081`;
     const video = document.getElementById('live');
 
     const socket = io(`https://${hostname}:8443`, { secure: true });
+
+    // --- H.264 stream via jMuxer ---
+    const jmuxer = new JMuxer({
+      node: 'live',
+      mode: 'video',
+      flushingTime: 0,
+      fps: 20,
+      debug: false
+    });
+
+    socket.on('h264data', (data) => {
+      jmuxer.feed({ video: new Uint8Array(data) });
+    });
 
     const statusDiv = document.getElementById('status');
     const feedbackDiv = document.getElementById('feedback');
@@ -299,65 +279,9 @@
     const joystickRightEl = document.getElementById('joystickRight');
     const thumbLeft = document.getElementById('thumbLeft');
     const thumbRight = document.getElementById('thumbRight');
-    const streamOverlay = document.getElementById('streamOverlay');
-    const enableStreamBtn = document.getElementById('enableStreamBtn');
-    const streamStatusDiv = document.getElementById('streamStatus');
 
     let stopped = true;
     let wakeLock = null;
-
-    // --- Stream cert handling ---
-    function startStream() {
-      video.src = `${streamBase}/stream.mjpg`;
-      streamOverlay.classList.add('hidden');
-    }
-
-    function checkStreamCert() {
-      // Try to load a tiny request from the stream server.
-      // If cert is already accepted, this succeeds and we start the stream.
-      const img = new Image();
-      // Use a timestamp to bust cache
-      img.onload = () => {
-        streamStatusDiv.textContent = 'Stream server OK';
-        startStream();
-      };
-      img.onerror = () => {
-        // Cert not yet accepted — show the enable button
-        streamStatusDiv.textContent = 'Tap below to enable the video stream';
-        enableStreamBtn.style.display = 'inline-block';
-      };
-      // Attempt to fetch the landing page as an image (will fail but triggers cert check)
-      fetch(`${streamBase}/`, { mode: 'no-cors' })
-        .then(() => {
-          // If fetch succeeds without error, cert is accepted
-          startStream();
-        })
-        .catch(() => {
-          streamStatusDiv.textContent = 'Tap below to enable the video stream';
-          enableStreamBtn.style.display = 'inline-block';
-        });
-    }
-
-    enableStreamBtn.addEventListener('click', () => {
-      // Open stream server in a popup so user can accept the cert
-      streamStatusDiv.textContent = 'Accept the certificate in the popup...';
-      const popup = window.open(`${streamBase}/`, '_blank', 'width=400,height=300');
-      // Listen for message from popup confirming cert accepted
-      window.addEventListener('message', function onMsg(e) {
-        if (e.data === 'stream-cert-ok') {
-          window.removeEventListener('message', onMsg);
-          startStream();
-        }
-      });
-      // Fallback: check again after a few seconds in case postMessage didn't work
-      setTimeout(() => {
-        if (streamOverlay.classList.contains('hidden')) return;
-        startStream();
-      }, 5000);
-    });
-
-    // Check cert on page load
-    checkStreamCert();
 
     // --- Device detection ---
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
