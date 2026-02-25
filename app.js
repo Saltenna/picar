@@ -78,9 +78,9 @@ function startCamera() {
     '--width', '640',
     '--height', '480',
     '--framerate', '25',
-    '--bitrate', '1500000',
+    '--bitrate', '1200000',
     '--profile', 'baseline',
-    '--intra', '3',
+    '--intra', '25',
     '--inline',
     '--nopreview',
     '-t', '0',
@@ -104,9 +104,9 @@ function startCamera() {
     if (isKeyframe(chunk)) {
       latestKeyframe = chunk;
     }
-    // Send H.264 chunks to all connected clients
+    // Send H.264 chunks reliably — dropping frames corrupts the decoder
     for (const s of socketClients) {
-      s.volatile.emit('h264data', chunk);
+      s.emit('h264data', chunk);
     }
   });
 
