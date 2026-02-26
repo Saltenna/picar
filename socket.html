@@ -558,7 +558,7 @@
       const gammadeg = event.gamma;
       const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
       const steering = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
-      socket.emit('fromclient', { throttle, steering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+      socket.volatile.emit('fromclient', { throttle, steering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
       feedbackDiv.innerHTML =
         `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
         `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}<br>` +
@@ -640,8 +640,28 @@
           }
         }
       };
+
+      // Separate handler for touchcancel — release tracking without zeroing the
+      // axis value.  Mobile browsers often fire touchcancel during multi-touch
+      // (e.g. two joysticks at once), which previously zeroed throttle mid-drive.
+      const cancelTouch = (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchId) {
+            active = false;
+            touchId = null;
+            // Keep current axis value so throttle doesn't drop to 0.
+            // User can re-touch the zone to regain control; the emergency-stop
+            // timer (2 s with no input) is still the ultimate safety net.
+            console.log('touchcancel on', axis, '— value preserved at',
+              axis === 'throttle' ? throttleValue : steeringValue);
+            e.preventDefault();
+            break;
+          }
+        }
+      };
+
       zoneEl.addEventListener('touchend', endTouch, { passive: false });
-      zoneEl.addEventListener('touchcancel', endTouch, { passive: false });
+      zoneEl.addEventListener('touchcancel', cancelTouch, { passive: false });
     }
 
     let joystickSendInterval = null;
@@ -652,7 +672,7 @@
       joystickSendInterval = setTimeout(() => {
         joystickSendInterval = null;
         const curvedSteering = applyCurve(steeringValue);
-        socket.emit('fromclient', { throttle: throttleValue, steering: curvedSteering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        socket.volatile.emit('fromclient', { throttle: throttleValue, steering: curvedSteering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${curvedSteering.toFixed(2)}`;
@@ -694,7 +714,7 @@
           else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
         }
 
-        socket.emit('fromclient', { throttle: throttleValue, steering: applyCurve(steeringValue), shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        socket.volatile.emit('fromclient', { throttle: throttleValue, steering: applyCurve(steeringValue), shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${applyCurve(steeringValue).toFixed(2)}<br>` +
