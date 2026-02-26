@@ -165,30 +165,31 @@
       font-family: monospace;
     }
 
-    #shiftBtn, .tlock-btn {
+    /* Button strip: centered row above joystick area */
+    #btnStrip {
       position: fixed;
-      bottom: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
+      bottom: 190px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 600;
+      pointer-events: none; /* pass taps through the container gap */
+    }
+    #btnStrip button {
+      pointer-events: auto;
+      padding: 5px 10px;
+      font-size: 11px;
       font-weight: bold;
       background: rgba(50, 50, 50, 0.8);
       color: #aaa;
-      border: 2px solid #555;
-      border-radius: 8px;
+      border: 1.5px solid #555;
+      border-radius: 6px;
       cursor: pointer;
-      z-index: 600;
       user-select: none;
       -webkit-user-select: none;
-    }
-    #shiftBtn {
-      left: 50%;
-      transform: translateX(-50%);
-    }
-    #tlockFrontBtn {
-      left: 10px;
-    }
-    #tlockRearBtn {
-      right: 10px;
+      white-space: nowrap;
+      line-height: 1.2;
     }
     #shiftBtn.high {
       background: rgba(0, 160, 80, 0.8);
@@ -199,6 +200,11 @@
       background: rgba(200, 120, 0, 0.8);
       color: white;
       border-color: #c80;
+    }
+    /* Landscape: even more compact, push strip a bit higher */
+    @media (orientation: landscape) and (max-height: 500px) {
+      #btnStrip { bottom: 185px; }
+      #btnStrip button { padding: 4px 8px; font-size: 10px; }
     }
 
     #streamOverlay {
@@ -256,12 +262,12 @@
     <div class="joystick-label">Steering</div>
   </div>
 
-  <!-- Shift toggle -->
-  <button id="shiftBtn">Gear: LOW</button>
-
-  <!-- T-Lock diff toggles -->
-  <button id="tlockFrontBtn" class="tlock-btn">Front: Open</button>
-  <button id="tlockRearBtn" class="tlock-btn">Rear: Open</button>
+  <!-- Shift / T-Lock button strip (centered above joysticks) -->
+  <div id="btnStrip">
+    <button id="tlockFrontBtn" class="tlock-btn">F.Diff: Open</button>
+    <button id="shiftBtn">Gear: LOW</button>
+    <button id="tlockRearBtn" class="tlock-btn">R.Diff: Open</button>
+  </div>
 
   <!-- Stream certificate overlay -->
   <div id="streamOverlay">
@@ -382,11 +388,11 @@
       const btn = document.getElementById('tlockFrontBtn');
       if (tlockFrontValue > 0) {
         tlockFrontValue = -1;
-        btn.textContent = 'Front: Locked';
+        btn.textContent = 'F.Diff: Lock';
         btn.classList.add('locked');
       } else {
         tlockFrontValue = 1;
-        btn.textContent = 'Front: Open';
+        btn.textContent = 'F.Diff: Open';
         btn.classList.remove('locked');
       }
       socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
@@ -396,11 +402,11 @@
       const btn = document.getElementById('tlockRearBtn');
       if (tlockRearValue < 0) {
         tlockRearValue = 1;
-        btn.textContent = 'Rear: Locked';
+        btn.textContent = 'R.Diff: Lock';
         btn.classList.add('locked');
       } else {
         tlockRearValue = -1;
-        btn.textContent = 'Rear: Open';
+        btn.textContent = 'R.Diff: Open';
         btn.classList.remove('locked');
       }
       socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
