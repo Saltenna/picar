@@ -148,6 +148,8 @@ const appServer = https.createServer(options, (req, res) => {
 });
 
 const io = new Server(appServer);
+const videoNs = io.of('/video');   // dedicated namespace for H.264 stream
+const controlNs = io.of('/control'); // dedicated namespace for C2
 appServer.listen(8443, '0.0.0.0');
 console.log('Pi Car web server listening on https://<ip>:8443/socket.html');
 
@@ -161,20 +163,26 @@ let lastAction = null;
 const throttle_ramp_up = 0.000;
 const throttle_ramp_down = 0.000;
 
-io.on('connection', (socket) => {
-  console.log('Socket connected');
+// --- Video namespace: H.264 stream only ---
+videoNs.on('connection', (socket) => {
+  console.log('Video client connected');
   socketClients.add(socket);
   startCamera();
-  // Send cached keyframe so client can decode immediately
+  // Send cached keyframe reliably so client can decode immediately
   if (latestKeyframe) {
     socket.emit('h264data', latestKeyframe);
   }
 
   socket.on('disconnect', () => {
-    console.log('Socket disconnected');
+    console.log('Video client disconnected');
     socketClients.delete(socket);
     stopCameraIfNoClients();
   });
+});
+
+// --- Control namespace: C2 commands only (no video traffic) ---
+controlNs.on('connection', (socket) => {
+  console.log('Control client connected');
 
   socket.on('arm', () => {
     console.log('Client requested ARM');
