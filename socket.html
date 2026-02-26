@@ -191,19 +191,19 @@
       white-space: nowrap;
       line-height: 1.2;
     }
-    #shiftBtn.high {
+    #btnStrip #shiftBtn.high {
       background: rgba(0, 160, 80, 0.8);
       color: white;
       border-color: #0a6;
     }
-    .tlock-btn.locked {
+    #btnStrip .tlock-btn.locked {
       background: rgba(200, 120, 0, 0.8);
       color: white;
       border-color: #c80;
     }
-    /* Landscape: even more compact, push strip a bit higher */
+    /* Landscape: compact buttons near the bottom of the screen */
     @media (orientation: landscape) and (max-height: 500px) {
-      #btnStrip { bottom: 185px; }
+      #btnStrip { bottom: 8px; }
       #btnStrip button { padding: 4px 8px; font-size: 10px; }
     }
 
