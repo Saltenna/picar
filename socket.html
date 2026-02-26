@@ -252,20 +252,27 @@
     const hostname = window.location.hostname;
     const video = document.getElementById('live');
 
-    const socket = io(`https://${hostname}:8443`, { secure: true });
+    // Separate sockets: video stream won't block control commands
+    const videoSocket = io(`https://${hostname}:8443/video`, { secure: true });
+    const socket = io(`https://${hostname}:8443/control`, { secure: true });
 
     // --- H.264 stream via jMuxer ---
     const jmuxer = new JMuxer({
       node: 'live',
       mode: 'video',
-      flushingTime: 0,
+      flushingTime: 100,
       fps: 20,
       debug: false
     });
 
-    socket.on('h264data', (data) => {
+    videoSocket.on('h264data', (data) => {
       jmuxer.feed({ video: new Uint8Array(data) });
     });
+
+    // Try to play video on user interaction (mobile autoplay policy)
+    document.addEventListener('touchstart', () => {
+      if (video.paused) video.play().catch(() => {});
+    }, { once: true });
 
     const statusDiv = document.getElementById('status');
     const feedbackDiv = document.getElementById('feedback');
@@ -292,6 +299,18 @@
     let shiftValue = 1; // 1 = low gear, -1 = high gear (wiring reversed)
     let tlockFrontValue = 1; // 1 = open, -1 = locked (wiring reversed)
     let tlockRearValue = -1;  // -1 = open, 1 = locked
+
+    // Steering curve: dead zone + exponential for less sensitivity near center
+    const STEERING_DEADZONE = 0.08;
+    const STEERING_EXPO = 2.0;  // >1 = less sensitive near center, more at edges
+    function applyCurve(raw) {
+      const sign = Math.sign(raw);
+      const abs = Math.abs(raw);
+      if (abs < STEERING_DEADZONE) return 0;
+      // Remap from [deadzone..1] to [0..1], then apply expo
+      const remapped = (abs - STEERING_DEADZONE) / (1 - STEERING_DEADZONE);
+      return sign * Math.pow(remapped, STEERING_EXPO);
+    }
 
     function toggleShift() {
       const btn = document.getElementById('shiftBtn');
@@ -487,7 +506,7 @@
       const betadeg = event.beta;
       const gammadeg = event.gamma;
       const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
-      const steering = Math.max(-1, Math.min(1, gammadeg / 25));
+      const steering = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
       socket.emit('fromclient', { throttle, steering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
       feedbackDiv.innerHTML =
         `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
@@ -581,10 +600,11 @@
       if (joystickSendInterval) return;
       joystickSendInterval = setTimeout(() => {
         joystickSendInterval = null;
-        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        const curvedSteering = applyCurve(steeringValue);
+        socket.emit('fromclient', { throttle: throttleValue, steering: curvedSteering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
-          `Steering: ${steeringValue.toFixed(2)}`;
+          `Steering: ${curvedSteering.toFixed(2)}`;
       }, 50);
     }
 
@@ -623,10 +643,10 @@
           else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
         }
 
-        socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        socket.emit('fromclient', { throttle: throttleValue, steering: applyCurve(steeringValue), shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
-          `Steering: ${steeringValue.toFixed(2)}<br>` +
+          `Steering: ${applyCurve(steeringValue).toFixed(2)}<br>` +
           `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
       }, 50);
     }
