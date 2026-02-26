@@ -212,11 +212,11 @@ io.on('connection', (socket) => {
       pwm.setServoPWM('tlock_rear', data.tlock_rear);   // RC5 for rear t-lock diff
     }
 
-    clearInterval(lastAction);
-    lastAction = setInterval(() => {
+    clearTimeout(lastAction);
+    lastAction = setTimeout(() => {
       pwm.setServoPWM('throttle', pwm_neutral);
       pwm.setServoPWM('steering', pwm_neutral);
-      console.log('### EMERGENCY STOP');
+      console.log('### EMERGENCY STOP (no input for 2s)');
     }, 2000);
   });
 });
