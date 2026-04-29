@@ -158,10 +158,13 @@ const io = new Server(appServer);
 appServer.listen(8443, '0.0.0.0');
 console.log('Pi Car web server listening on https://<ip>:8443/socket.html');
 
-let old_throttle = 0.14;
-let old_steering = 0.14;
-const pwm_neutral = config.pwm_neutral;
-let smoothed_throttle = pwm_neutral;
+// App control values are normalized to [-1..1] across all frontends.
+const control_neutral = config.control_neutral ?? 0;
+const input_timeout_ms = config.input_timeout_ms ?? 500;
+
+let old_throttle = control_neutral;
+let old_steering = control_neutral;
+let smoothed_throttle = control_neutral;
 let logcount = 0;
 let lastAction = null;
 
@@ -184,24 +187,31 @@ io.on('connection', (socket) => {
 
   socket.on('fromclient', (data) => {
     logcount++;
-    old_throttle = data.throttle;
-    old_steering = data.steering;
+    const throttleCmd = Number.isFinite(data.throttle)
+      ? Math.max(-1, Math.min(1, data.throttle))
+      : control_neutral;
+    const steeringCmd = Number.isFinite(data.steering)
+      ? Math.max(-1, Math.min(1, data.steering))
+      : control_neutral;
 
-    if (throttle_ramp_up && (data.throttle > smoothed_throttle)) {
+    old_throttle = throttleCmd;
+    old_steering = steeringCmd;
+
+    if (throttle_ramp_up && (throttleCmd > smoothed_throttle)) {
       smoothed_throttle += throttle_ramp_up;
-      if (smoothed_throttle > data.throttle) smoothed_throttle = data.throttle;
-    } else if (throttle_ramp_down && (data.throttle < smoothed_throttle)) {
+      if (smoothed_throttle > throttleCmd) smoothed_throttle = throttleCmd;
+    } else if (throttle_ramp_down && (throttleCmd < smoothed_throttle)) {
       smoothed_throttle -= throttle_ramp_down;
-      if (smoothed_throttle < data.throttle) smoothed_throttle = data.throttle;
+      if (smoothed_throttle < throttleCmd) smoothed_throttle = throttleCmd;
     }
     else {
-      smoothed_throttle = data.throttle;
+      smoothed_throttle = throttleCmd;
     }
 
     if (logcount === 10) logcount = 0;
 
     pwm.setServoPWM('throttle', smoothed_throttle); // PWM0 for throttle
-    pwm.setServoPWM('steering', data.steering);     // PWM1 for steering
+    pwm.setServoPWM('steering', steeringCmd);        // PWM1 for steering
     if (data.shift !== undefined) {
       pwm.setServoPWM('shift', data.shift);          // RC2 for 2-speed transmission
     }
@@ -214,16 +224,16 @@ io.on('connection', (socket) => {
 
     clearTimeout(lastAction);
     lastAction = setTimeout(() => {
-      pwm.setServoPWM('throttle', pwm_neutral);
-      pwm.setServoPWM('steering', pwm_neutral);
-      console.log('### EMERGENCY STOP (no input for 2s)');
-    }, 2000);
+      pwm.setServoPWM('throttle', control_neutral);
+      pwm.setServoPWM('steering', control_neutral);
+      console.log(`### EMERGENCY STOP (no input for ${input_timeout_ms}ms)`);
+    }, input_timeout_ms);
   });
 });
 
 process.on('SIGINT', function () {
-  pwm.setServoPWM('throttle', pwm_neutral);
-  pwm.setServoPWM('steering', pwm_neutral);
+  pwm.setServoPWM('throttle', control_neutral);
+  pwm.setServoPWM('steering', control_neutral);
   if (ffmpegProcess) ffmpegProcess.kill('SIGTERM');
   console.log('\nGracefully shutting down from SIGINT');
   process.exit();

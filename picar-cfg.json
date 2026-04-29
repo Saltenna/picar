@@ -12,6 +12,11 @@
   "pwm_max_us": 2000,
   "pwm_min": 0.105,
   "pwm_max": 0.175,
-  "pwm_neutral": 0.14
+  "pwm_neutral": 0.14,
+"steering_neutral_us": 1500,
+"throttle_neutral_us": 1500,
+"shift_default_us": 2000,
+"tlock_front_default_us": 2000,
+"tlock_rear_default_us": 1000
 }
 

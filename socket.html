@@ -647,19 +647,23 @@
         }
       };
 
-      // Separate handler for touchcancel — release tracking without zeroing the
-      // axis value.  Mobile browsers often fire touchcancel during multi-touch
-      // (e.g. two joysticks at once), which previously zeroed throttle mid-drive.
+      // Separate handler for touchcancel. Mobile browsers can fire this during
+      // multi-touch transitions. Preserve throttle to avoid abrupt motor cuts,
+      // but force steering back to center so it can't stick to one side.
       const cancelTouch = (e) => {
         for (const t of e.changedTouches) {
           if (t.identifier === touchId) {
             active = false;
             touchId = null;
-            // Keep current axis value so throttle doesn't drop to 0.
-            // User can re-touch the zone to regain control; the emergency-stop
-            // timer (2 s with no input) is still the ultimate safety net.
-            console.log('touchcancel on', axis, '— value preserved at',
-              axis === 'throttle' ? throttleValue : steeringValue);
+            if (axis === 'throttle') {
+              // Keep current throttle so transient touchcancel doesn't cause a
+              // sudden brake/reverse event.
+              console.log('touchcancel on throttle — value preserved at', throttleValue);
+            } else {
+              // Steering must fail-safe to center immediately on cancel.
+              resetThumb();
+              console.log('touchcancel on steering — reset to center');
+            }
             e.preventDefault();
             break;
           }
