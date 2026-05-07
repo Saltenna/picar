@@ -30,6 +30,7 @@ const hlsPlaylist = path.join(hlsDir, 'stream.m3u8');
 const hlsSegmentPattern = path.join(hlsDir, 'stream-%03d.ts');
 const hlsPlayerPath = require.resolve('hls.js/dist/hls.min.js');
 const VIDEO_FRAMERATE = 15;
+const HLS_GOP_FRAMES = 8;
 const STREAM_IDLE_TIMEOUT_MS = 10000;
 const STREAM_STOP_TIMEOUT_MS = 5000;
 const HLS_READ_RETRY_MS = 100;
@@ -127,7 +128,7 @@ function startCamera() {
     '--framerate', String(VIDEO_FRAMERATE),
     '--bitrate', '1500000',
     '--profile', 'baseline',
-    '--intra', String(VIDEO_FRAMERATE),
+    '--intra', String(HLS_GOP_FRAMES),
     '--inline',
     '--nopreview',
     '-t', '0',
@@ -149,9 +150,9 @@ function startCamera() {
     '-muxdelay', '0',
     '-muxpreload', '0',
     '-f', 'hls',
-    '-hls_time', '1',
-    '-hls_list_size', '4',
-    '-hls_delete_threshold', '2',
+    '-hls_time', '0.5',
+    '-hls_list_size', '6',
+    '-hls_delete_threshold', '3',
     '-hls_flags', 'delete_segments+omit_endlist+independent_segments',
     '-hls_segment_filename', hlsSegmentPattern,
     hlsPlaylist
