@@ -237,7 +237,7 @@
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <img id="live" src="" alt="Video stream not available">
+  <video id="live" autoplay muted playsinline></video>
   <div id="status">Status: Connecting...</div>
   <div id="feedback">Throttle: --<br>Steering: --</div>
   <button id="enableBtn" style="display:none;">Enable Orientation</button>
@@ -312,10 +312,48 @@
 
     let stopped = true;
     let wakeLock = null;
+    let liveSyncTimer = null;
+
+    const LIVE_LAG_TARGET_SECONDS = 1.25;
+    const LIVE_LAG_SEEK_THRESHOLD_SECONDS = 3;
+    const LIVE_LAG_SPEEDUP_THRESHOLD_SECONDS = 1.75;
+
+    function syncVideoToLiveEdge() {
+      if (!video.buffered.length || video.paused) return;
+
+      const rangeIndex = video.buffered.length - 1;
+      const liveEdge = video.buffered.end(rangeIndex);
+      const lag = liveEdge - video.currentTime;
+      if (!Number.isFinite(lag)) return;
+
+      if (lag > LIVE_LAG_SEEK_THRESHOLD_SECONDS) {
+        video.currentTime = Math.max(
+          video.buffered.start(rangeIndex),
+          liveEdge - LIVE_LAG_TARGET_SECONDS
+        );
+        video.playbackRate = 1;
+      } else if (lag > LIVE_LAG_SPEEDUP_THRESHOLD_SECONDS) {
+        video.playbackRate = 1.15;
+      } else {
+        video.playbackRate = 1;
+      }
+    }
+
+    function startLiveSync() {
+      if (liveSyncTimer) return;
+      liveSyncTimer = setInterval(syncVideoToLiveEdge, 1000);
+    }
+
+    video.addEventListener('waiting', () => {
+      video.playbackRate = 1;
+    });
 
     // --- Stream cert handling ---
     function startStream() {
-      video.src = `${streamBase}/stream.mjpg`;
+      video.src = `${streamBase}/hls/stream.m3u8?start=${Date.now()}`;
+      video.load();
+      video.play().catch(() => {});
+      startLiveSync();
       streamOverlay.classList.add('hidden');
     }
 
@@ -775,4 +813,3 @@
   </script>
 </body>
 </html>
-

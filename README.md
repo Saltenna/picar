@@ -175,7 +175,7 @@ https://<raspberry-pi-ip>:8443/socket.html
 ```
 To view <u>just</u> the camera stream:
 ```
-https://<raspberry-pi-ip>:8443/stream.mjpg
+https://<raspberry-pi-ip>:8081/hls/stream.m3u8
 ```
 
 ### Configure Pi to Run App on Boot
@@ -207,4 +207,3 @@ sudo systemctl start picar
 ```
 
 The web server and stream will now automatically start when the Pi boots.
-
