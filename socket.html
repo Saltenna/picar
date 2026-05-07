@@ -288,12 +288,11 @@
   </div>
 
   <script>
-    const hostname = window.location.hostname;
-    const streamBase = `https://${hostname}:8081`;
+    const streamBase = window.location.origin;
     const video = document.getElementById('live');
 
-    // Socket.io for controls only (video is on separate port 8081)
-    const socket = io(`https://${hostname}:8443`, { secure: true });
+    // Socket.io for controls; HLS is served from the same origin as this page.
+    const socket = io({ secure: true });
 
     const statusDiv = document.getElementById('status');
     const feedbackDiv = document.getElementById('feedback');

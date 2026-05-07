@@ -239,10 +239,52 @@ function getHlsContentType(filename) {
   return 'application/octet-stream';
 }
 
+function serveHlsRequest(pathname, res) {
+  const filename = path.basename(pathname);
+  if (!/^(stream\.m3u8|stream-\d+\.ts)$/.test(filename)) {
+    res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+    res.end();
+    return;
+  }
+
+  if (!markStreamActive()) {
+    res.writeHead(503, {
+      'Content-Type': 'text/plain',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end('Camera stream is unavailable');
+    return;
+  }
+
+  const filePath = path.join(hlsDir, filename);
+  readHlsFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, {
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end();
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': getHlsContentType(filename),
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(data);
+  });
+}
+
 // Web UI + Socket Server (port 8443)
 const appServer = https.createServer(options, (req, res) => {
   const parsedUrl = url.parse(req.url, true);
-  if (parsedUrl.pathname === '/vendor/hls.min.js') {
+  if ((parsedUrl.pathname || '').startsWith('/hls/')) {
+    serveHlsRequest(parsedUrl.pathname, res);
+  } else if (parsedUrl.pathname === '/vendor/hls.min.js') {
     fs.readFile(hlsPlayerPath, (err, data) => {
       if (err) {
         res.writeHead(404);
@@ -365,43 +407,7 @@ const streamServer = https.createServer(options, (req, res) => {
   }
 
   if (pathname.startsWith('/hls/')) {
-    const filename = path.basename(pathname);
-    if (!/^(stream\.m3u8|stream-\d+\.ts)$/.test(filename)) {
-      res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
-      res.end();
-      return;
-    }
-
-    if (!markStreamActive()) {
-      res.writeHead(503, {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-store',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end('Camera stream is unavailable');
-      return;
-    }
-
-    const filePath = path.join(hlsDir, filename);
-    readHlsFile(filePath, (err, data) => {
-      if (err) {
-        res.writeHead(404, {
-          'Cache-Control': 'no-store',
-          'Access-Control-Allow-Origin': '*',
-        });
-        res.end();
-        return;
-      }
-
-      res.writeHead(200, {
-        'Content-Type': getHlsContentType(filename),
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end(data);
-    });
+    serveHlsRequest(pathname, res);
     return;
   }
 
