@@ -234,6 +234,7 @@
       text-align: center;
     }
   </style>
+  <script src="/vendor/hls.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
@@ -312,6 +313,7 @@
 
     let stopped = true;
     let wakeLock = null;
+    let hlsPlayer = null;
     let liveSyncTimer = null;
 
     const LIVE_LAG_TARGET_SECONDS = 1.25;
@@ -349,12 +351,58 @@
     });
 
     // --- Stream cert handling ---
-    function startStream() {
-      video.src = `${streamBase}/hls/stream.m3u8?start=${Date.now()}`;
-      video.load();
+    function showVideo() {
       video.play().catch(() => {});
       startLiveSync();
       streamOverlay.classList.add('hidden');
+    }
+
+    function destroyHlsPlayer() {
+      if (!hlsPlayer) return;
+      hlsPlayer.destroy();
+      hlsPlayer = null;
+    }
+
+    function startStream() {
+      const streamUrl = `${streamBase}/hls/stream.m3u8?start=${Date.now()}`;
+      streamStatusDiv.textContent = 'Starting video stream...';
+      destroyHlsPlayer();
+      video.removeAttribute('src');
+      video.load();
+
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = streamUrl;
+        video.load();
+        showVideo();
+        return;
+      }
+
+      if (window.Hls && Hls.isSupported()) {
+        hlsPlayer = new Hls({
+          liveSyncDurationCount: 2,
+          liveMaxLatencyDurationCount: 4,
+          maxLiveSyncPlaybackRate: 1.2,
+          backBufferLength: 5
+        });
+        hlsPlayer.on(Hls.Events.MEDIA_ATTACHED, () => {
+          hlsPlayer.loadSource(streamUrl);
+        });
+        hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+          showVideo();
+        });
+        hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+          if (!data.fatal) return;
+          destroyHlsPlayer();
+          streamOverlay.classList.remove('hidden');
+          enableStreamBtn.style.display = 'inline-block';
+          streamStatusDiv.textContent = `Video stream error: ${data.type}`;
+        });
+        hlsPlayer.attachMedia(video);
+        return;
+      }
+
+      streamStatusDiv.textContent = 'This browser cannot play the HLS video stream';
+      enableStreamBtn.style.display = 'inline-block';
     }
 
     function checkStreamCert() {

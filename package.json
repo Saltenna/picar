@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "hls.js": "^1.6.16",
     "mavlink": "^1.0.1",
     "node-static": "^0.7.11",
     "pi-blaster.js": "^0.1.3",

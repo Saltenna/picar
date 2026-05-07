@@ -28,6 +28,7 @@ const options = {
 const hlsDir = '/tmp/picar-hls';
 const hlsPlaylist = path.join(hlsDir, 'stream.m3u8');
 const hlsSegmentPattern = path.join(hlsDir, 'stream-%03d.ts');
+const hlsPlayerPath = require.resolve('hls.js/dist/hls.min.js');
 const VIDEO_FRAMERATE = 15;
 const STREAM_IDLE_TIMEOUT_MS = 10000;
 const STREAM_STOP_TIMEOUT_MS = 5000;
@@ -149,8 +150,8 @@ function startCamera() {
     '-muxpreload', '0',
     '-f', 'hls',
     '-hls_time', '1',
-    '-hls_list_size', '2',
-    '-hls_delete_threshold', '1',
+    '-hls_list_size', '4',
+    '-hls_delete_threshold', '2',
     '-hls_flags', 'delete_segments+omit_endlist+independent_segments',
     '-hls_segment_filename', hlsSegmentPattern,
     hlsPlaylist
@@ -240,7 +241,20 @@ function getHlsContentType(filename) {
 // Web UI + Socket Server (port 8443)
 const appServer = https.createServer(options, (req, res) => {
   const parsedUrl = url.parse(req.url, true);
-  if (parsedUrl.pathname === '/status') {
+  if (parsedUrl.pathname === '/vendor/hls.min.js') {
+    fs.readFile(hlsPlayerPath, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(data);
+    });
+  } else if (parsedUrl.pathname === '/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'OK', throttle: old_throttle, steering: old_steering }));
   } else {
