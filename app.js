@@ -282,8 +282,11 @@ function serveHlsRequest(pathname, res) {
 // Web UI + Socket Server (port 8443)
 const appServer = https.createServer(options, (req, res) => {
   const parsedUrl = url.parse(req.url, true);
-  if ((parsedUrl.pathname || '').startsWith('/hls/')) {
-    serveHlsRequest(parsedUrl.pathname, res);
+  const pathname = parsedUrl.pathname || '/';
+  if (pathname.startsWith('/hls/')) {
+    serveHlsRequest(pathname, res);
+  } else if (/^\/(stream\.m3u8|stream-\d+\.ts)$/.test(pathname)) {
+    serveHlsRequest(`/hls${pathname}`, res);
   } else if (parsedUrl.pathname === '/vendor/hls.min.js') {
     fs.readFile(hlsPlayerPath, (err, data) => {
       if (err) {
@@ -408,6 +411,11 @@ const streamServer = https.createServer(options, (req, res) => {
 
   if (pathname.startsWith('/hls/')) {
     serveHlsRequest(pathname, res);
+    return;
+  }
+
+  if (/^\/(stream\.m3u8|stream-\d+\.ts)$/.test(pathname)) {
+    serveHlsRequest(`/hls${pathname}`, res);
     return;
   }
 

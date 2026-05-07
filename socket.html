@@ -314,21 +314,32 @@
     let wakeLock = null;
     let hlsPlayer = null;
 
-    // --- Stream cert handling ---
-    function showVideo() {
-      video.play().catch(() => {});
-      streamOverlay.classList.add('hidden');
+    function showStreamControls(message) {
+      if (message) streamStatusDiv.textContent = message;
+      enableStreamBtn.style.display = 'inline-block';
+      streamOverlay.classList.remove('hidden');
     }
 
+    // --- Stream cert handling ---
     function destroyHlsPlayer() {
       if (!hlsPlayer) return;
       hlsPlayer.destroy();
       hlsPlayer = null;
     }
 
+    async function tryStartPlayback() {
+      try {
+        await video.play();
+        streamOverlay.classList.add('hidden');
+      } catch (err) {
+        showStreamControls('Tap below to start the video stream');
+      }
+    }
+
     function startStream() {
       const streamUrl = `${streamBase}/hls/stream.m3u8?start=${Date.now()}`;
       streamStatusDiv.textContent = 'Starting video stream...';
+      enableStreamBtn.style.display = 'none';
       destroyHlsPlayer();
       video.removeAttribute('src');
       video.load();
@@ -336,7 +347,7 @@
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = streamUrl;
         video.load();
-        showVideo();
+        tryStartPlayback();
         return;
       }
 
@@ -351,50 +362,25 @@
           hlsPlayer.loadSource(streamUrl);
         });
         hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-          showVideo();
+          tryStartPlayback();
         });
         hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
           if (!data.fatal) return;
           destroyHlsPlayer();
-          streamOverlay.classList.remove('hidden');
-          enableStreamBtn.style.display = 'inline-block';
-          streamStatusDiv.textContent = `Video stream error: ${data.type}`;
+          showStreamControls(`Video stream error: ${data.type}`);
         });
         hlsPlayer.attachMedia(video);
         return;
       }
 
-      streamStatusDiv.textContent = 'This browser cannot play the HLS video stream';
-      enableStreamBtn.style.display = 'inline-block';
-    }
-
-    function checkStreamCert() {
-      fetch(`${streamBase}/`, { mode: 'no-cors' })
-        .then(() => {
-          startStream();
-        })
-        .catch(() => {
-          streamStatusDiv.textContent = 'Tap below to enable the video stream';
-          enableStreamBtn.style.display = 'inline-block';
-        });
+      showStreamControls('This browser cannot play the HLS video stream');
     }
 
     enableStreamBtn.addEventListener('click', () => {
-      streamStatusDiv.textContent = 'Accept the certificate in the popup...';
-      const popup = window.open(`${streamBase}/`, '_blank', 'width=400,height=300');
-      window.addEventListener('message', function onMsg(e) {
-        if (e.data === 'stream-cert-ok') {
-          window.removeEventListener('message', onMsg);
-          startStream();
-        }
-      });
-      setTimeout(() => {
-        if (streamOverlay.classList.contains('hidden')) return;
-        startStream();
-      }, 5000);
+      startStream();
     });
 
-    checkStreamCert();
+    startStream();
 
     // --- Device detection ---
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
