@@ -3,6 +3,7 @@ set -euo pipefail
 
 # PiCar installer for Raspberry Pi OS (Trixie)
 # - Installs OS packages
+# - Installs Raspberry Pi camera apps for H.264 streaming
 # - Clones / updates /opt/picar
 # - Installs Node deps
 # - (Optional) Installs MAVProxy in /opt/venvs/mavproxy
@@ -13,6 +14,19 @@ say() { echo -e "${LOG_PREFIX} $*"; }
 die() { echo -e "${LOG_PREFIX} ERROR: $*" >&2; exit 1; }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+install_first_available_pkg() {
+  local description="$1"; shift
+  local pkg
+  for pkg in "$@"; do
+    if apt-cache show "$pkg" >/dev/null 2>&1; then
+      say "Installing ${description}: ${pkg}"
+      apt-get install -y "$pkg"
+      return 0
+    fi
+  done
+  return 1
+}
 
 if [[ "${EUID}" -ne 0 ]]; then
   die "Please run as root (e.g. sudo ./install.sh)"
@@ -94,6 +108,20 @@ say "Selected camera: ${CAMERA_TYPE}"
 if [[ "${CAMERA_TYPE}" == "usb webcam (/dev/video0)" ]]; then
   # Helpful packages for USB/V4L2 workflows
   apt-get install -y v4l-utils || true
+else
+  # H.264 streaming requires rpicam-vid on Bookworm/Trixie, or
+  # libcamera-vid on older Raspberry Pi OS releases.
+  if ! need_cmd rpicam-vid && ! need_cmd libcamera-vid; then
+    install_first_available_pkg "Raspberry Pi camera apps" \
+      rpicam-apps-lite rpicam-apps libcamera-apps || true
+  fi
+  if need_cmd rpicam-vid; then
+    say "Camera capture command: rpicam-vid"
+  elif need_cmd libcamera-vid; then
+    say "Camera capture command: libcamera-vid"
+  else
+    die "Pi camera selected, but neither rpicam-vid nor libcamera-vid is installed. Install rpicam-apps-lite or rpicam-apps and re-run."
+  fi
 fi
 
 USE_MAVPROXY="no"
