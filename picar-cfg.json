@@ -13,10 +13,20 @@
   "pwm_min": 0.105,
   "pwm_max": 0.175,
   "pwm_neutral": 0.14,
-"steering_neutral_us": 1500,
-"throttle_neutral_us": 1500,
-"shift_default_us": 2000,
-"tlock_front_default_us": 2000,
-"tlock_rear_default_us": 1000
-}
+  "steering_neutral_us": 1500,
+  "throttle_neutral_us": 1500,
+  "shift_default_us": 2000,
+  "tlock_front_default_us": 2000,
+  "tlock_rear_default_us": 1000,
 
+  "comment3": "stream_codec: 'webrtc' uses MediaMTX (https://host:8889/cam). Fallbacks: 'h264' or 'mjpeg'.",
+  "stream_codec": "webrtc",
+  "webrtc_protocol": "https",
+  "webrtc_port": 8889,
+  "webrtc_path": "cam",
+  "h264_width": 640,
+  "h264_height": 480,
+  "h264_framerate": 30,
+  "h264_bitrate_kbps": 600,
+  "h264_intra_period": 15
+}

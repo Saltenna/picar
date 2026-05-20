@@ -25,6 +25,27 @@
       object-fit: cover;
     }
 
+    /* H264 canvas — same footprint as the MJPEG img; hidden until H264 mode starts */
+    #liveCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+    }
+
+    #webrtcVideo {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      background: black;
+      object-fit: cover;
+    }
+
     #status {
       position: fixed;
       bottom: 10px;
@@ -238,6 +259,8 @@
 </head>
 <body>
   <img id="live" src="" alt="Video stream not available">
+  <canvas id="liveCanvas"></canvas>
+  <video id="webrtcVideo" autoplay muted playsinline disablepictureinpicture></video>
   <div id="status">Status: Connecting...</div>
   <div id="feedback">Throttle: --<br>Steering: --</div>
   <button id="enableBtn" style="display:none;">Enable Orientation</button>
@@ -288,7 +311,7 @@
 
   <script>
     const hostname = window.location.hostname;
-    const streamBase = `https://${hostname}:8081`;
+    const legacyStreamBase = `https://${hostname}:8081`;
     const video = document.getElementById('live');
 
     // Socket.io for controls only (video is on separate port 8081)
@@ -309,20 +332,379 @@
     const streamOverlay = document.getElementById('streamOverlay');
     const enableStreamBtn = document.getElementById('enableStreamBtn');
     const streamStatusDiv = document.getElementById('streamStatus');
+    const webrtcVideo = document.getElementById('webrtcVideo');
 
     let stopped = true;
     let wakeLock = null;
 
-    // --- Stream cert handling ---
-    function startStream() {
-      video.src = `${streamBase}/stream.mjpg`;
+    // ── Stream setup ─────────────────────────────────────────────────────────
+    // Supports modes decided by the server's streamConfig event:
+    //   'webrtc' → MediaMTX WHEP/WebRTC reader (https://host:8889/cam/whep)
+    //   'avc1.*' → H264 WebSocket (wss://host:8081/stream) decoded via WebCodecs
+    //   'mjpeg'  → classic MJPEG multipart image src (https://host:8081/stream.mjpg)
+    //
+    // ?stream=mjpeg, ?stream=h264, or ?stream=webrtc can force a client mode
+    // for diagnostics, as long as the matching server/service is running.
+
+    const canvasEl  = document.getElementById('liveCanvas');
+    const canvasCtx = canvasEl.getContext('2d');
+
+    // Sync canvas pixel dimensions to the physical screen size.
+    // Must be called before each draw or after an orientation/resize event.
+    function syncCanvasSize() {
+      canvasEl.width  = window.innerWidth;
+      canvasEl.height = window.innerHeight;
+    }
+    window.addEventListener('resize', syncCanvasSize);
+
+    // Draw a VideoFrame onto the canvas using object-fit:cover semantics.
+    function renderH264Frame(frame) {
+      const cw = canvasEl.width,  ch = canvasEl.height;
+      const fw = frame.codedWidth, fh = frame.codedHeight;
+      // Scale so the frame fills the canvas without distortion (crops edges).
+      const scale = Math.max(cw / fw, ch / fh);
+      const dw = fw * scale, dh = fh * scale;
+      canvasCtx.drawImage(frame, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      frame.close();
+    }
+
+    // ── H264 WebSocket + WebCodecs decoder ───────────────────────────────────
+    let h264Ws       = null;
+    let videoDecoder = null;
+    let webrtcPc = null;
+    let webrtcSessionUrl = null;
+
+    function stopH264Stream() {
+      if (h264Ws) {
+        try { h264Ws.onclose = null; h264Ws.close(); } catch (_) {}
+        h264Ws = null;
+      }
+      if (videoDecoder && videoDecoder.state !== 'closed') {
+        try { videoDecoder.close(); } catch (_) {}
+      }
+      videoDecoder = null;
+    }
+
+    function hideAllVideoSurfaces() {
+      video.style.display = 'none';
+      canvasEl.style.display = 'none';
+      webrtcVideo.style.display = 'none';
+    }
+
+    function webrtcWhepUrlFromConfig(cfg) {
+      const protocol = cfg.protocol || 'https';
+      const port = cfg.port || 8889;
+      const path = (cfg.path || 'cam').replace(/^\/+/, '');
+      return `${protocol}://${hostname}:${port}/${path}/whep`;
+    }
+
+    async function stopWebRTCStream() {
+      if (webrtcSessionUrl) {
+        try { await fetch(webrtcSessionUrl, { method: 'DELETE' }); } catch (_) {}
+        webrtcSessionUrl = null;
+      }
+      if (webrtcPc) {
+        try { webrtcPc.close(); } catch (_) {}
+        webrtcPc = null;
+      }
+      webrtcVideo.srcObject = null;
+    }
+
+    function waitIceGatheringComplete(pc) {
+      if (pc.iceGatheringState === 'complete') return Promise.resolve();
+      return new Promise((resolve) => {
+        const timeout = setTimeout(done, 2000);
+        function done() {
+          clearTimeout(timeout);
+          pc.removeEventListener('icegatheringstatechange', onStateChange);
+          resolve();
+        }
+        function onStateChange() {
+          if (pc.iceGatheringState === 'complete') done();
+        }
+        pc.addEventListener('icegatheringstatechange', onStateChange);
+      });
+    }
+
+    async function setupWebRTCStream(cfg) {
+      stopH264Stream();
+      await stopWebRTCStream();
+      hideAllVideoSurfaces();
+      webrtcVideo.style.display = 'block';
       streamOverlay.classList.add('hidden');
+
+      const whepUrl = cfg.url || webrtcWhepUrlFromConfig(cfg);
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      webrtcPc = pc;
+
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.ontrack = (evt) => {
+        if (evt.streams && evt.streams[0]) {
+          webrtcVideo.srcObject = evt.streams[0];
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+          console.warn('WebRTC connection state:', pc.connectionState);
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitIceGatheringComplete(pc);
+
+      const res = await fetch(whepUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: pc.localDescription.sdp,
+      });
+      if (!res.ok) throw new Error(`WHEP offer failed: HTTP ${res.status}`);
+
+      const location = res.headers.get('location');
+      if (location) webrtcSessionUrl = new URL(location, whepUrl).toString();
+
+      const answer = await res.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      webrtcVideo.play().catch(() => {});
+    }
+
+    function setupH264Stream(cfg) {
+      hideAllVideoSurfaces();
+      canvasEl.style.display = 'block';
+      stopWebRTCStream();
+      streamOverlay.classList.add('hidden');
+      syncCanvasSize();
+
+      if (!('VideoDecoder' in window)) {
+        // Browser doesn't support WebCodecs — show a clear error.
+        streamOverlay.classList.remove('hidden');
+        enableStreamBtn.style.display  = 'none';
+        streamStatusDiv.innerHTML =
+          'H.264 requires Chrome / Edge or iOS Safari 16.4+.<br>' +
+          'Switch the server to MJPEG mode (<code>stream_codec: "mjpeg"</code>) ' +
+          'or use a supported browser.';
+        return;
+      }
+
+      let decoderReady = false;
+      let decodeTs     = 0;
+      const tsStep     = Math.round(1_000_000 / (cfg.fps || 30));  // µs per frame
+
+      // Parse the SPS NAL unit inside a keyframe packet to derive the exact
+      // codec string (avc1.PPCCLL) that matches the encoder output.
+      // This avoids the level/profile mismatch that makes WebCodecs reject the IDR
+      // (e.g. declared avc1.42001f vs actual avc1.428028 from Pi 4 VideoCore IV).
+      function parseSPSCodec(buf) {
+        const u8 = new Uint8Array(buf);
+        const toHex2 = n => n.toString(16).padStart(2, '0');
+        for (let i = 0; i < u8.length - 4; i++) {
+          // Match 4-byte start code 00 00 00 01
+          if (u8[i] === 0 && u8[i+1] === 0 && u8[i+2] === 0 && u8[i+3] === 1) {
+            if ((u8[i+4] & 0x1f) === 7 && i + 7 < u8.length) {
+              return `avc1.${toHex2(u8[i+5])}${toHex2(u8[i+6])}${toHex2(u8[i+7])}`;
+            }
+          }
+          // Match 3-byte start code 00 00 01
+          if (u8[i] === 0 && u8[i+1] === 0 && u8[i+2] === 1) {
+            if ((u8[i+3] & 0x1f) === 7 && i + 6 < u8.length) {
+              return `avc1.${toHex2(u8[i+4])}${toHex2(u8[i+5])}${toHex2(u8[i+6])}`;
+            }
+          }
+        }
+        // Fallback to known Pi 4 VideoCore IV codec string
+        return 'avc1.428028';
+      }
+
+      function initDecoder(codecStr) {
+        if (videoDecoder && videoDecoder.state !== 'closed') {
+          try { videoDecoder.reset(); } catch (_) {}
+        }
+        videoDecoder = new VideoDecoder({
+          output: (frame) => {
+            // If the decode queue is growing (network burst / slow render) drop
+            // non-rendered frames to prevent the classic freeze-then-catch-up.
+            if (videoDecoder.decodeQueueSize > 2) { frame.close(); return; }
+            renderH264Frame(frame);
+          },
+          error: (err) => {
+            console.warn('VideoDecoder error:', err.message);
+            decoderReady = false;
+            // Do NOT send requestKeyframe here — it triggers the encoder-restart
+            // loop.  The --intra 15 setting guarantees an IDR every ~0.5 s.
+          },
+        });
+
+        try {
+          videoDecoder.configure({
+            codec:                codecStr,
+            codedWidth:           cfg.width  || 640,
+            codedHeight:          cfg.height || 480,
+            hardwareAcceleration: 'prefer-hardware',
+            optimizeForLatency:   true,   // minimise internal decoder buffering
+          });
+          decoderReady = true;
+          console.log('VideoDecoder configured with codec:', codecStr);
+        } catch (e) {
+          console.error('VideoDecoder configure error:', e);
+          decoderReady = false;
+        }
+      }
+
+      // Decoder is NOT initialised here — we wait for the first keyframe so we
+      // can parse the SPS NAL and derive the exact codec string.
+
+      function connectWs() {
+        if (h264Ws) { try { h264Ws.close(); } catch (_) {} }
+
+        // keyframeReceived: guards against the decoder receiving delta (P) frames
+        // before its first IDR.  The server already gates new connections to
+        // keyframes-only (wsPending), but this flag is a belt-and-suspenders
+        // safety net and is also needed after a decoder reset.
+        let keyframeReceived = false;
+        let lastKfRequest    = 0;         // rate-limit requestKeyframe messages
+
+        h264Ws = new WebSocket(`wss://${hostname}:8081/stream`);
+        h264Ws.binaryType = 'arraybuffer';
+
+        h264Ws.onopen = () => {
+          console.log('H264 WebSocket connected');
+          decodeTs = 0;
+          keyframeReceived = false;
+        };
+
+        h264Ws.onmessage = (evt) => {
+          const buf = evt.data;
+          if (!(buf instanceof ArrayBuffer) || buf.byteLength < 5) return;
+
+          // Packet layout: [flags:1][frameNum:4][h264-annexb-data]
+          const view     = new DataView(buf);
+          const isKey    = (view.getUint8(0) & 0x01) !== 0;
+          const h264Data = buf.slice(5);
+
+          // On the FIRST keyframe: parse the SPS to get the real codec string,
+          // then initialise the decoder.  Deferring until here avoids the
+          // level/profile mismatch (avc1.42001f declared vs avc1.428028 actual)
+          // that caused WebCodecs to reject the first IDR immediately.
+          if (!keyframeReceived) {
+            if (!isKey) return;
+            const detectedCodec = parseSPSCodec(h264Data);
+            console.log('Detected codec from SPS:', detectedCodec);
+            initDecoder(detectedCodec);
+            if (!decoderReady) return;
+            keyframeReceived = true;
+          }
+
+          // Re-initialise decoder after an error; only safe on a keyframe.
+          if (!decoderReady) {
+            if (!isKey) return;
+            const detectedCodec = parseSPSCodec(h264Data);
+            initDecoder(detectedCodec);
+            if (!decoderReady) return;
+            keyframeReceived = true;
+          }
+
+          // Drop non-keyframes when the decode queue is already deep — this
+          // prevents the latency snowball that causes the freeze→burst pattern.
+          if (!isKey && videoDecoder.decodeQueueSize > 2) return;
+
+          try {
+            videoDecoder.decode(new EncodedVideoChunk({
+              type:      isKey ? 'key' : 'delta',
+              timestamp: decodeTs,
+              data:      h264Data,
+            }));
+            decodeTs += tsStep;
+          } catch (e) {
+            console.warn('Decode chunk error:', e);
+            decoderReady    = false;
+            keyframeReceived = false;
+            // Request a keyframe but rate-limit to once per 5 s to avoid
+            // triggering the encoder-restart loop seen in initial testing.
+            const now = Date.now();
+            if (now - lastKfRequest > 5000 && h264Ws.readyState === WebSocket.OPEN) {
+              lastKfRequest = now;
+              h264Ws.send(JSON.stringify({ type: 'requestKeyframe' }));
+            }
+          }
+        };
+
+        h264Ws.onerror = () => console.warn('H264 WebSocket error');
+
+        h264Ws.onclose = () => {
+          console.log('H264 WebSocket closed — reconnecting in 2 s');
+          decoderReady    = false;
+          keyframeReceived = false;
+          setTimeout(connectWs, 2000);
+        };
+      }
+
+      connectWs();
+    }
+
+    // ── startStream: dispatch to H264 or MJPEG ───────────────────────────────
+    function startStream(cfg) {
+      if (cfg && cfg.codec === 'webrtc') {
+        setupWebRTCStream(cfg).catch((err) => {
+          console.warn('WebRTC setup failed:', err);
+          streamOverlay.classList.remove('hidden');
+          enableStreamBtn.style.display = 'inline-block';
+          streamStatusDiv.textContent = 'WebRTC stream failed. Tap to retry video.';
+        });
+      } else if (cfg && cfg.codec !== 'mjpeg') {
+        setupH264Stream(cfg);
+      } else {
+        stopH264Stream();
+        stopWebRTCStream();
+        hideAllVideoSurfaces();
+        video.style.display = 'block';
+        video.src = `${legacyStreamBase}/stream.mjpg`;
+        streamOverlay.classList.add('hidden');
+      }
+    }
+
+    // ── Certificate acceptance flow ───────────────────────────────────────────
+    // The video service uses the same self-signed cert as the control server.
+    // The browser must accept it on the video port before HTTPS/WSS/WebRTC works.
+    // We probe with a no-cors fetch; if it fails the user taps the overlay
+    // button which opens the cert page in a popup.
+    let streamCertOk    = false;
+    let pendingStreamCfg = null;
+    let pendingProbeUrl  = null;
+    let pendingOpenUrl   = null;
+    let certPollTimer    = null;
+
+    const requestedStream = new URLSearchParams(window.location.search).get('stream');
+
+    function normalizeStreamConfig(cfg) {
+      if (requestedStream === 'mjpeg') return { codec: 'mjpeg' };
+      if (requestedStream === 'h264') return { codec: 'avc1.42001f', width: cfg.width, height: cfg.height, fps: cfg.fps };
+      if (requestedStream === 'webrtc') return { codec: 'webrtc', protocol: cfg.protocol, port: cfg.port, path: cfg.path, url: cfg.url };
+      return cfg;
+    }
+
+    function setPendingStream(cfg) {
+      pendingStreamCfg = normalizeStreamConfig(cfg);
+      streamCertOk = false;
+
+      if (pendingStreamCfg.codec === 'webrtc') {
+        pendingOpenUrl = pendingStreamCfg.url || webrtcWhepUrlFromConfig(pendingStreamCfg);
+        pendingProbeUrl = pendingOpenUrl;
+      } else {
+        pendingOpenUrl = `${legacyStreamBase}/`;
+        pendingProbeUrl = pendingOpenUrl;
+      }
+
+      checkStreamCert();
     }
 
     function checkStreamCert() {
-      fetch(`${streamBase}/`, { mode: 'no-cors' })
+      if (!pendingStreamCfg || !pendingProbeUrl) return;
+      streamStatusDiv.textContent = 'Checking stream server...';
+      enableStreamBtn.style.display = 'none';
+      fetch(pendingProbeUrl, { mode: 'no-cors' })
         .then(() => {
-          startStream();
+          streamCertOk = true;
+          if (pendingStreamCfg) startStream(pendingStreamCfg);
         })
         .catch(() => {
           streamStatusDiv.textContent = 'Tap below to enable the video stream';
@@ -330,22 +712,52 @@
         });
     }
 
+    function pollStreamCert() {
+      if (certPollTimer) clearInterval(certPollTimer);
+      let attempts = 0;
+      certPollTimer = setInterval(() => {
+        attempts++;
+        if (streamCertOk || !pendingProbeUrl || attempts > 30) {
+          clearInterval(certPollTimer);
+          certPollTimer = null;
+          return;
+        }
+        fetch(pendingProbeUrl, { mode: 'no-cors' })
+          .then(() => {
+            clearInterval(certPollTimer);
+            certPollTimer = null;
+            streamCertOk = true;
+            if (pendingStreamCfg) startStream(pendingStreamCfg);
+          })
+          .catch(() => {});
+      }, 1000);
+    }
+
     enableStreamBtn.addEventListener('click', () => {
-      streamStatusDiv.textContent = 'Accept the certificate in the popup...';
-      const popup = window.open(`${streamBase}/`, '_blank', 'width=400,height=300');
+      streamStatusDiv.textContent = 'Accept the certificate in the popup…';
+      const popup = window.open(pendingOpenUrl || `${legacyStreamBase}/`, '_blank', 'width=480,height=360');
+      pollStreamCert();
       window.addEventListener('message', function onMsg(e) {
         if (e.data === 'stream-cert-ok') {
           window.removeEventListener('message', onMsg);
-          startStream();
+          streamCertOk = true;
+          if (pendingStreamCfg) startStream(pendingStreamCfg);
         }
       });
+      // Fallback: if the postMessage never arrives (popup blocker, old browser)
+      // wait 5 s then try to start the stream anyway.
       setTimeout(() => {
-        if (streamOverlay.classList.contains('hidden')) return;
-        startStream();
+        if (!streamCertOk && pendingStreamCfg && pendingStreamCfg.codec !== 'webrtc') {
+          streamCertOk = true;
+          startStream(pendingStreamCfg);
+        }
       }, 5000);
     });
 
-    checkStreamCert();
+    // Receive stream config pushed by the server on Socket.io connect.
+    socket.on('streamConfig', (cfg) => {
+      setPendingStream(cfg);
+    });
 
     // --- Device detection ---
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -775,4 +1187,3 @@
   </script>
 </body>
 </html>
-

@@ -4,7 +4,7 @@
 This is a modernized web-controlled RC car platform running on a Raspberry Pi 5 with Bookworm OS and Node.js v18.19.0. It allows real-time control of an RC car via a browser, supporting both desktop and mobile control interfaces. The mobile interface uses the device's IMU for tilt-based control.
 
 The car is equipped with:
-- A USB webcam for video streaming
+- A Raspberry Pi camera for low-latency WebRTC video streaming
 - Throttle and steering servos controlled via PWM
 - A local HTTPS server that hosts the UI and control API
 
@@ -165,17 +165,41 @@ To use your smartphone as a hotspot:
 
 This allows your mobile device to connect to the Pi's services over a local secure HTTPS connection.
 
+### Video Streaming
+
+The default video path is WebRTC through MediaMTX:
+
+```text
+Pi camera -> MediaMTX WHEP/WebRTC (:8889) -> socket.html <video>
+```
+
+This is the preferred mode for Firefox, Chrome, Edge, Safari, and mobile browsers. It is also more tolerant of fast motion than MJPEG or the experimental raw H.264/WebCodecs path because the browser receives a normal WebRTC stream with jitter buffering and congestion behavior.
+
+The repo keeps the older streams as diagnostics:
+
+- `stream_codec: "webrtc"`: default; requires `mediamtx.service`.
+- `stream_codec: "h264"`: raw H.264 over WebSocket; works best in Chrome/Edge.
+- `stream_codec: "mjpeg"`: simple MJPEG fallback; high bandwidth and prone to stalls during motion.
+
+The MediaMTX config lives at `mediamtx.yml`. The default is a stability-first `480x360@20fps`, 350 kbps H.264 baseline, IDR every 10 frames. If fast motion still freezes the feed, reduce `rpiCameraBitrate` further or switch `rpiCameraCodec` from `hardwareH264` to `softwareH264` for a test run.
+
 ### Running the Application
 ```bash
+sudo systemctl start mediamtx
 sudo node app.js
 ```
 Open a browser and go to:
 ```
 https://<raspberry-pi-ip>:8443/socket.html
 ```
-To view <u>just</u> the camera stream:
+The control UI connects to the MediaMTX WHEP endpoint internally:
 ```
-https://<raspberry-pi-ip>:8443/stream.mjpg
+https://<raspberry-pi-ip>:8889/cam/whep
+```
+Open `socket.html` for an actual browser view of the WebRTC stream.
+To view the legacy MJPEG stream when `stream_codec` is set to `mjpeg`:
+```
+https://<raspberry-pi-ip>:8081/stream.mjpg
 ```
 
 ### Configure Pi to Run App on Boot
@@ -207,4 +231,3 @@ sudo systemctl start picar
 ```
 
 The web server and stream will now automatically start when the Pi boots.
-

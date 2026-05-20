@@ -86,7 +86,7 @@ done
 
 say "Updating APT and installing base packages..."
 apt-get update -y
-apt-get install -y git nodejs npm ffmpeg python3 python3-venv python3-pip ca-certificates
+apt-get install -y git nodejs npm ffmpeg python3 python3-venv python3-pip ca-certificates curl tar
 
 # Camera choice (placeholder for future wiring into app/config)
 CAMERA_TYPE="$(prompt_choice "Camera type?" "1" "pi-cam (libcamera/rpicam)" "usb webcam (/dev/video0)")"
@@ -95,6 +95,12 @@ if [[ "${CAMERA_TYPE}" == "usb webcam (/dev/video0)" ]]; then
   # Helpful packages for USB/V4L2 workflows
   apt-get install -y v4l-utils || true
 fi
+
+USE_WEBRTC="no"
+if [[ "${CAMERA_TYPE}" == "pi-cam (libcamera/rpicam)" ]] && prompt_yes_no "Install MediaMTX WebRTC video service?" "y"; then
+  USE_WEBRTC="yes"
+fi
+say "WebRTC video: ${USE_WEBRTC}"
 
 USE_MAVPROXY="no"
 if prompt_yes_no "Will you use MAVProxy (Pixhawk/ArduPilot PWM via MAVLink)?" "y"; then
@@ -187,9 +193,13 @@ cfg = json.loads(p.read_text())
 cfg['pwm_method'] = sys.argv[2]
 cfg['camera_type'] = sys.argv[3]
 cfg['use_mavproxy'] = (sys.argv[4] == 'yes')
+cfg['stream_codec'] = 'webrtc' if sys.argv[5] == 'yes' else 'h264'
+cfg.setdefault('webrtc_protocol', 'https')
+cfg.setdefault('webrtc_port', 8889)
+cfg.setdefault('webrtc_path', 'cam')
 p.write_text(json.dumps(cfg, indent=2) + '\n')
 print('Wrote', p)
-" "${CFG}" "${PWM_METHOD}" "${CAMERA_TYPE}" "${USE_MAVPROXY}"
+" "${CFG}" "${PWM_METHOD}" "${CAMERA_TYPE}" "${USE_MAVPROXY}" "${USE_WEBRTC}"
 else
   say "WARNING: ${CFG} not found; skipping config update."
 fi
@@ -204,6 +214,31 @@ if [[ "${USE_MAVPROXY}" == "yes" ]]; then
   python3 -m venv /opt/venvs/mavproxy
   /opt/venvs/mavproxy/bin/pip install --upgrade pip wheel
   /opt/venvs/mavproxy/bin/pip install --upgrade MAVProxy pyserial future
+fi
+
+# MediaMTX install for WebRTC video
+if [[ "${USE_WEBRTC}" == "yes" ]]; then
+  MEDIAMTX_VERSION="${MEDIAMTX_VERSION:-v1.17.1}"
+  if [[ "${MEDIAMTX_VERSION}" != v* ]]; then
+    MEDIAMTX_VERSION="v${MEDIAMTX_VERSION}"
+  fi
+
+  case "$(uname -m)" in
+    aarch64|arm64) MEDIAMTX_ARCH="arm64" ;;
+    armv7l|armhf)  MEDIAMTX_ARCH="armv7" ;;
+    x86_64|amd64)  MEDIAMTX_ARCH="amd64" ;;
+    *) die "Unsupported MediaMTX architecture: $(uname -m)" ;;
+  esac
+
+  say "Installing MediaMTX ${MEDIAMTX_VERSION} (${MEDIAMTX_ARCH}) into ${REPO_DIR}/bin ..."
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "${TMP_DIR}"' EXIT
+  MTX_URL="https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/mediamtx_${MEDIAMTX_VERSION}_linux_${MEDIAMTX_ARCH}.tar.gz"
+  curl -fL "${MTX_URL}" -o "${TMP_DIR}/mediamtx.tar.gz"
+  tar -xzf "${TMP_DIR}/mediamtx.tar.gz" -C "${TMP_DIR}"
+  mkdir -p "${REPO_DIR}/bin"
+  install -m 0755 "${TMP_DIR}/mediamtx" "${REPO_DIR}/bin/mediamtx"
+  chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}/bin" || true
 fi
 
 # systemd install with templating of User=
@@ -248,6 +283,16 @@ fi
 systemctl daemon-reload
 
 # Enable/disable services
+if [[ "${USE_WEBRTC}" == "yes" ]]; then
+  say "Enabling mediamtx.service..."
+  systemctl enable --now mediamtx.service
+else
+  if systemctl list-unit-files | grep -q '^mediamtx\.service'; then
+    say "Disabling mediamtx.service..."
+    systemctl disable --now mediamtx.service || true
+  fi
+fi
+
 say "Enabling picar.service..."
 systemctl enable --now picar.service
 

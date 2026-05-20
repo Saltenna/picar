@@ -1,0 +1,13 @@
+[Unit]
+Description=MediaMTX WebRTC video server
+After=network.target
+
+[Service]
+ExecStart=/opt/picar/bin/mediamtx /opt/picar/mediamtx.yml
+WorkingDirectory=/opt/picar
+Restart=always
+RestartSec=2
+User=saltenna
+
+[Install]
+WantedBy=multi-user.target
