@@ -413,7 +413,7 @@
     function waitIceGatheringComplete(pc) {
       if (pc.iceGatheringState === 'complete') return Promise.resolve();
       return new Promise((resolve) => {
-        const timeout = setTimeout(done, 2000);
+        const timeout = setTimeout(done, 5000);
         function done() {
           clearTimeout(timeout);
           pc.removeEventListener('icegatheringstatechange', onStateChange);
@@ -768,6 +768,7 @@
     let shiftValue = 1; // 1 = low gear, -1 = high gear (wiring reversed)
     let tlockFrontValue = 1; // 1 = open, -1 = locked (wiring reversed)
     let tlockRearValue = -1;  // -1 = open, 1 = locked
+    let controlSendInterval = null;
 
     // Steering curve: dead zone + exponential for less sensitivity near center
     const STEERING_DEADZONE = 0.08;
@@ -792,8 +793,7 @@
         btn.textContent = 'Gear: LOW';
         btn.classList.remove('high');
       }
-      // Send immediately so shift takes effect without waiting for joystick/keyboard
-      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+      sendControlValues();
     }
 
     function toggleTlockFront() {
@@ -807,7 +807,7 @@
         btn.textContent = 'F.Diff: Open';
         btn.classList.remove('locked');
       }
-      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+      sendControlValues();
     }
 
     function toggleTlockRear() {
@@ -821,7 +821,7 @@
         btn.textContent = 'R.Diff: Open';
         btn.classList.remove('locked');
       }
-      socket.emit('fromclient', { throttle: throttleValue, steering: steeringValue, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+      sendControlValues();
     }
 
     // Make shift button work during active touch (joystick) and on desktop
@@ -888,6 +888,34 @@
       steeringValue = 0;
     }
 
+    function currentSteeringCommand() {
+      return controlMode === 'orientation' ? steeringValue : applyCurve(steeringValue);
+    }
+
+    function sendControlValues() {
+      socket.volatile.emit('fromclient', {
+        throttle: throttleValue,
+        steering: currentSteeringCommand(),
+        shift: shiftValue,
+        tlock_front: tlockFrontValue,
+        tlock_rear: tlockRearValue
+      });
+    }
+
+    function startControlSendLoop() {
+      if (controlSendInterval) return;
+      sendControlValues();
+      controlSendInterval = setInterval(() => {
+        if (!stopped) sendControlValues();
+      }, 50);
+    }
+
+    function stopControlSendLoop() {
+      if (!controlSendInterval) return;
+      clearInterval(controlSendInterval);
+      controlSendInterval = null;
+    }
+
     function cycleControlMode() {
       const modes = ['joystick', 'keyboard', 'orientation'];
       const next = modes[(modes.indexOf(controlMode) + 1) % modes.length];
@@ -925,7 +953,10 @@
     function toggleStop() {
       if (!stopped) {
         // STOP: disarm and send neutral
-        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        throttleValue = 0;
+        steeringValue = 0;
+        sendControlValues();
+        stopControlSendLoop();
         socket.emit('disarm');
         stopBtn.textContent = 'Start';
         stopBtn.style.background = '#333';
@@ -934,6 +965,7 @@
       } else {
         // START: arm the vehicle
         socket.emit('arm');
+        startControlSendLoop();
         stopBtn.textContent = 'Stop';
         stopBtn.style.background = '#a33';
         stopped = false;
@@ -974,12 +1006,11 @@
       if (stopped) return;
       const betadeg = event.beta;
       const gammadeg = event.gamma;
-      const throttle = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
-      const steering = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
-      socket.volatile.emit('fromclient', { throttle, steering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+      throttleValue = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
+      steeringValue = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
       feedbackDiv.innerHTML =
-        `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttle.toFixed(2)}<br>` +
-        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steering.toFixed(2)}<br>` +
+        `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttleValue.toFixed(2)}<br>` +
+        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steeringValue.toFixed(2)}<br>` +
         `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
     }
 
@@ -1089,12 +1120,11 @@
     let joystickSendInterval = null;
     function sendJoystickValues() {
       if (stopped) return;
-      // Throttle sending to ~20Hz to avoid flooding
+      // Throttle UI feedback to ~20Hz; the shared control loop sends commands.
       if (joystickSendInterval) return;
       joystickSendInterval = setTimeout(() => {
         joystickSendInterval = null;
         const curvedSteering = applyCurve(steeringValue);
-        socket.volatile.emit('fromclient', { throttle: throttleValue, steering: curvedSteering, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${curvedSteering.toFixed(2)}`;
@@ -1136,7 +1166,6 @@
           else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
         }
 
-        socket.volatile.emit('fromclient', { throttle: throttleValue, steering: applyCurve(steeringValue), shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
         feedbackDiv.innerHTML =
           `Throttle: ${throttleValue.toFixed(2)}<br>` +
           `Steering: ${applyCurve(steeringValue).toFixed(2)}<br>` +
@@ -1150,7 +1179,7 @@
         e.preventDefault();
         throttleValue = 0;
         steeringValue = 0;
-        socket.emit('fromclient', { throttle: 0, steering: 0, shift: shiftValue, tlock_front: tlockFrontValue, tlock_rear: tlockRearValue });
+        sendControlValues();
         feedbackDiv.innerHTML = `Throttle: 0.00<br>Steering: 0.00<br>Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
         return;
       }

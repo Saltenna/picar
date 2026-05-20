@@ -5,6 +5,7 @@
   "mavproxy_host": "127.0.0.1",
   "mavproxy_port": 5760,
   "mavproxy_rate_hz": 20,
+  "input_timeout_ms": 1000,
   "steering_gpio": 13,
   "throttle_gpio": 12,
   "pwm_period_us": 20000,

@@ -14,11 +14,12 @@ webrtcServerKey: /opt/picar/certs/key.pem
 webrtcServerCert: /opt/picar/certs/cert.pem
 webrtcAllowOrigins: ['*']
 webrtcLocalUDPAddress: :8189
-webrtcLocalTCPAddress: ''
+webrtcLocalTCPAddress: :8189
 webrtcIPsFromInterfaces: true
+webrtcIPsFromInterfacesList: []
 webrtcAdditionalHosts: []
-webrtcHandshakeTimeout: 10s
-webrtcTrackGatherTimeout: 2s
+webrtcHandshakeTimeout: 20s
+webrtcTrackGatherTimeout: 5s
 
 paths:
   cam:
