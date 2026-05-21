@@ -19,7 +19,7 @@ webrtcIPsFromInterfaces: true
 webrtcIPsFromInterfacesList: []
 webrtcAdditionalHosts: []
 webrtcHandshakeTimeout: 20s
-webrtcTrackGatherTimeout: 5s
+webrtcTrackGatherTimeout: 10s
 
 paths:
   cam:

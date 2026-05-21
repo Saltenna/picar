@@ -438,14 +438,29 @@
       webrtcPc = pc;
 
       pc.addTransceiver('video', { direction: 'recvonly' });
+
       pc.ontrack = (evt) => {
         if (evt.streams && evt.streams[0]) {
           webrtcVideo.srcObject = evt.streams[0];
+          // Explicit play() needed when srcObject is set after element is attached;
+          // the `autoplay` attribute handles most cases but this is a safety net.
+          webrtcVideo.play().catch(() => {});
         }
       };
+
+      // Reconnect automatically when ICE fails.
+      // 'disconnected' can recover on its own — only 'failed' is unrecoverable.
+      // This keeps the video live through brief radio dropouts without operator action.
       pc.onconnectionstatechange = () => {
-        if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-          console.warn('WebRTC connection state:', pc.connectionState);
+        const s = pc.connectionState;
+        console.log('WebRTC connection state:', s);
+        if (s === 'failed') {
+          console.log('WebRTC ICE failed — tearing down and reconnecting in 3 s…');
+          stopWebRTCStream().then(() => {
+            if (pendingStreamCfg && pendingStreamCfg.codec === 'webrtc') {
+              setTimeout(() => setupWebRTCStream(pendingStreamCfg).catch(console.error), 3000);
+            }
+          });
         }
       };
 
@@ -465,7 +480,6 @@
 
       const answer = await res.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-      webrtcVideo.play().catch(() => {});
     }
 
     function setupH264Stream(cfg) {
