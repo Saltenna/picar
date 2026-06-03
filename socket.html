@@ -701,8 +701,12 @@
       streamCertOk = false;
 
       if (pendingStreamCfg.codec === 'webrtc') {
-        pendingOpenUrl = pendingStreamCfg.url || webrtcWhepUrlFromConfig(pendingStreamCfg);
-        pendingProbeUrl = pendingOpenUrl;
+        // Use the MediaMTX base URL for cert acceptance — the WHEP path only
+        // accepts POST and returns "method not allowed" when opened in a browser.
+        const cfg2 = pendingStreamCfg;
+        const webrtcBase = `${cfg2.protocol || 'https'}://${hostname}:${cfg2.port || 8889}/`;
+        pendingOpenUrl  = webrtcBase;
+        pendingProbeUrl = webrtcBase;
       } else {
         pendingOpenUrl = `${legacyStreamBase}/`;
         pendingProbeUrl = pendingOpenUrl;
