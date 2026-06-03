@@ -15,9 +15,6 @@ module.exports = function createWebRTCStream(config /*, streamServer not used */
   return {
     clientCount() { return 0; },
     stop() {},
-    // MediaMTX owns the stream bytes — Node can't count them.
-    // app.js falls back to /proc/net/dev interface-level TX for this mode.
-    getStats() { return { txBytes: null, frames: null }; },
     getStreamConfig() {
       return { codec: 'webrtc', protocol: PROTOCOL, port: PORT, path: PATH };
     },

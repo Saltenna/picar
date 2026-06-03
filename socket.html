@@ -269,36 +269,7 @@
     <button id="stopBtn" onclick="toggleStop()">Start</button>
     <button onclick="refreshPage()">Refresh Page</button>
     <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
-    <button id="statsToggleBtn" onclick="toggleStats()">Stats: Off</button>
-    <div id="statsCheckboxes" style="display:none; border-top:1px solid #555; margin-top:6px; padding-top:6px;">
-      <div style="font-size:11px; color:#888; margin-bottom:4px;">Display:</div>
-      <label style="display:block; font-size:13px; margin:3px 0; cursor:pointer;">
-        <input type="checkbox" id="statsTxChk" checked> TX kbps
-      </label>
-      <label style="display:block; font-size:13px; margin:3px 0; cursor:pointer;">
-        <input type="checkbox" id="statsRxChk"> RX kbps
-      </label>
-      <label style="display:block; font-size:13px; margin:3px 0; cursor:pointer;">
-        <input type="checkbox" id="statsFpsChk"> FPS
-      </label>
-    </div>
   </div>
-
-  <div id="statsOverlay" style="
-    display: none;
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.6);
-    color: #0f0;
-    padding: 5px 10px;
-    border-radius: 5px;
-    font-size: 13px;
-    font-family: monospace;
-    z-index: 100;
-    pointer-events: none;
-    line-height: 1.6;
-  "></div>
 
   <!-- Virtual joysticks (touch devices) -->
   <div id="joystickLeft" class="joystick-zone">
@@ -1250,43 +1221,6 @@
       if (Object.keys(keysDown).length === 0 && keyboardInterval) {
         // Keep interval running briefly to allow decay
       }
-    });
-
-    // ── Stats overlay ────────────────────────────────────────────────────────
-    const statsOverlay     = document.getElementById('statsOverlay');
-    const statsToggleBtn   = document.getElementById('statsToggleBtn');
-    const statsCheckboxes  = document.getElementById('statsCheckboxes');
-    const statsTxChk       = document.getElementById('statsTxChk');
-    const statsRxChk       = document.getElementById('statsRxChk');
-    const statsFpsChk      = document.getElementById('statsFpsChk');
-    let   statsEnabled     = false;
-    let   lastStats        = null;
-
-    function toggleStats() {
-      statsEnabled = !statsEnabled;
-      statsToggleBtn.textContent = statsEnabled ? 'Stats: On' : 'Stats: Off';
-      statsCheckboxes.style.display = statsEnabled ? 'block' : 'none';
-      statsOverlay.style.display    = statsEnabled ? 'block' : 'none';
-      if (statsEnabled && lastStats) renderStats(lastStats);
-    }
-
-    function renderStats(s) {
-      if (!statsEnabled) return;
-      const lines = [];
-      if (statsTxChk.checked) lines.push(`TX: ${s.txKbps !== null ? s.txKbps + ' kbps' : 'N/A'}`);
-      if (statsRxChk.checked) lines.push(`RX: ${s.rxKbps !== null ? s.rxKbps + ' kbps' : 'N/A'}`);
-      if (statsFpsChk.checked) lines.push(`FPS: ${s.fps !== null ? s.fps : 'N/A'}`);
-      statsOverlay.innerHTML = lines.join('<br>') || '&nbsp;';
-    }
-
-    // Re-render immediately when a checkbox changes, using the last received stats
-    [statsTxChk, statsRxChk, statsFpsChk].forEach(chk =>
-      chk.addEventListener('change', () => { if (lastStats) renderStats(lastStats); })
-    );
-
-    socket.on('stats', (s) => {
-      lastStats = s;
-      renderStats(s);
     });
 
     // --- Socket status ---

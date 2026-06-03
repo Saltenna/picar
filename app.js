@@ -5,7 +5,6 @@ const { Server }    = require('socket.io');
 const url           = require('url');
 const static        = require('node-static');
 const path          = require('path');
-const os            = require('os');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const configPath = path.join(__dirname, 'picar-cfg.json');
@@ -69,55 +68,6 @@ const appServer = https.createServer(options, (req, res) => {
 const io = new Server(appServer);
 appServer.listen(8443, '0.0.0.0');
 console.log('Pi Car web server: https://<ip>:8443/socket.html');
-
-// ── Bandwidth / FPS stats ─────────────────────────────────────────────────────
-// Reads /proc/net/dev for interface-level RX and TX byte counters.
-// TX from stream modules is more accurate for H264/MJPEG (excludes control
-// traffic); for WebRTC the module returns null and we fall back to interface TX.
-function readNetDev(iface) {
-  try {
-    for (const line of fs.readFileSync('/proc/net/dev', 'utf8').split('\n')) {
-      const t = line.trim();
-      if (!t.startsWith(iface + ':')) continue;
-      const p = t.split(/\s+/);
-      // fields: iface: rxBytes rxPkts rxErrs rxDrop rxFifo rxFrame rxComp rxMcast txBytes ...
-      return { rx: parseInt(p[1]), tx: parseInt(p[9]) };
-    }
-  } catch (_) {}
-  return null;
-}
-
-function detectStatsIface() {
-  // Prefer wlan0/eth0 over loopback; fall back to first non-lo interface.
-  const preferred = ['wlan0', 'eth0', 'wlan1'];
-  const nets = Object.keys(os.networkInterfaces()).filter(n => n !== 'lo');
-  return preferred.find(n => nets.includes(n)) || nets[0] || 'eth0';
-}
-
-const statsIface   = config.stats_interface || detectStatsIface();
-let   lastNetDev   = readNetDev(statsIface);
-console.log(`Stats interface: ${statsIface}`);
-
-setInterval(() => {
-  const streamStats = stream.getStats();      // {txBytes, frames} — nulls for WebRTC
-  const net         = readNetDev(statsIface);
-
-  let rxKbps = null, txKbps = null, fps = null;
-
-  if (net && lastNetDev) {
-    rxKbps = Math.round((net.rx - lastNetDev.rx) * 8 / 1000);
-    // Use interface TX for WebRTC (MediaMTX owns the bytes), module TX otherwise
-    if (streamStats.txBytes === null) {
-      txKbps = Math.round((net.tx - lastNetDev.tx) * 8 / 1000);
-    }
-  }
-  lastNetDev = net;
-
-  if (streamStats.txBytes !== null) txKbps = Math.round(streamStats.txBytes * 8 / 1000);
-  if (streamStats.frames  !== null) fps    = streamStats.frames;
-
-  io.emit('stats', { txKbps, rxKbps, fps, iface: statsIface });
-}, 1000);
 
 const control_neutral  = config.control_neutral  ?? 0;
 const input_timeout_ms = config.input_timeout_ms ?? 500;
