@@ -274,6 +274,48 @@
     }
 
     /* ── Stream cert overlay ─────────────────────────────────────────────────── */
+    /* ── Video modal ─────────────────────────────────────────────────────────── */
+    .video-modal {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.88);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .video-modal.open { display: flex; }
+    .vparam-grid {
+      display: grid;
+      grid-template-columns: 90px 1fr 60px;
+      gap: 10px 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .vparam-grid label {
+      font-size: 13px;
+      color: #ccc;
+    }
+    .vparam-grid select,
+    .vparam-grid input[type=range] {
+      width: 100%;
+      accent-color: #2a7;
+    }
+    .vparam-grid select {
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+    .vval {
+      font-size: 12px;
+      color: #aaa;
+      font-family: monospace;
+      text-align: right;
+    }
+
     #streamOverlay {
       position: fixed; top: 0; left: 0;
       width: 100vw; height: 100vh;
@@ -313,6 +355,7 @@
     <button onclick="refreshPage()">Refresh Page</button>
     <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
     <button onclick="openConfig()">Config</button>
+    <button onclick="openVideo()">Video</button>
   </div>
 
   <!-- Virtual joysticks -->
@@ -386,6 +429,42 @@
 
       <div class="config-close-row">
         <button onclick="closeConfig()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video params modal -->
+  <div id="videoModal" class="video-modal">
+    <div class="config-inner">
+      <h2>Video <button onclick="closeVideo()">✕</button></h2>
+      <p id="videoModalNote" style="font-size:12px;color:#888;margin:0 0 14px 0;"></p>
+
+      <div class="vparam-grid">
+        <label>Resolution</label>
+        <select id="vpRes">
+          <option value="320x240">320 × 240</option>
+          <option value="480x360">480 × 360</option>
+          <option value="640x480">640 × 480</option>
+          <option value="1280x720">1280 × 720</option>
+        </select>
+        <span></span>
+
+        <label>FPS</label>
+        <input type="range" id="vpFps" min="5" max="30" step="5">
+        <span id="vpFpsVal" class="vval"></span>
+
+        <label id="vpBitrateLabel">Bitrate</label>
+        <input type="range" id="vpBitrate" min="100" max="2000" step="50">
+        <span id="vpBitrateVal" class="vval"></span>
+
+        <label id="vpQualityLabel">Quality</label>
+        <input type="range" id="vpQuality" min="5" max="50" step="5">
+        <span id="vpQualityVal" class="vval"></span>
+      </div>
+
+      <div class="config-close-row" style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="applyVideo()" style="background:#2a7;">Apply</button>
+        <button onclick="closeVideo()" style="background:#555;">Close</button>
       </div>
     </div>
   </div>
@@ -948,7 +1027,98 @@
       }, 5000);
     });
 
-    socket.on('streamConfig', (cfg) => { setPendingStream(cfg); });
+    socket.on('streamConfig', (cfg) => {
+      setPendingStream(cfg);
+      initVideoDefaults(cfg);
+    });
+
+    // ── Video params ──────────────────────────────────────────────────────────
+    const videoModal      = document.getElementById('videoModal');
+    const videoModalNote  = document.getElementById('videoModalNote');
+    const vpResEl         = document.getElementById('vpRes');
+    const vpFpsEl         = document.getElementById('vpFps');
+    const vpFpsVal        = document.getElementById('vpFpsVal');
+    const vpBitrateEl     = document.getElementById('vpBitrate');
+    const vpBitrateVal    = document.getElementById('vpBitrateVal');
+    const vpBitrateLabel  = document.getElementById('vpBitrateLabel');
+    const vpQualityEl     = document.getElementById('vpQuality');
+    const vpQualityVal    = document.getElementById('vpQualityVal');
+    const vpQualityLabel  = document.getElementById('vpQualityLabel');
+
+    // Loaded from localStorage, then overridden by server defaults if not present
+    let videoParams = {};
+    try { videoParams = JSON.parse(localStorage.getItem('picar-video') || '{}'); } catch (_) {}
+
+    const RESOLUTIONS = ['320x240', '480x360', '640x480', '1280x720'];
+
+    function closestRes(w, h) {
+      const key = `${w}x${h}`;
+      return RESOLUTIONS.includes(key) ? key : RESOLUTIONS[1]; // default 480x360
+    }
+
+    function initVideoDefaults(cfg) {
+      // Only set defaults from server if not already in localStorage
+      if (!videoParams.fps     && cfg.fps)     videoParams.fps     = cfg.fps;
+      if (!videoParams.width   && cfg.width)   videoParams.width   = cfg.width;
+      if (!videoParams.height  && cfg.height)  videoParams.height  = cfg.height;
+      if (!videoParams.bitrate && cfg.bitrate) videoParams.bitrate = cfg.bitrate;
+      if (!videoParams.quality && cfg.quality) videoParams.quality = cfg.quality;
+    }
+
+    function openVideo() {
+      commandMenu.style.display = 'none';
+      const codec = pendingStreamCfg ? pendingStreamCfg.codec : null;
+      const isWebRTC = codec === 'webrtc';
+      const isMjpeg  = codec === 'mjpeg';
+
+      videoModalNote.textContent = isWebRTC
+        ? 'WebRTC: Apply will update mediamtx.yml and restart MediaMTX (~2 s interruption).'
+        : '';
+
+      // Show/hide codec-specific rows
+      vpBitrateLabel.style.display = isMjpeg  ? 'none' : '';
+      vpBitrateEl.style.display    = isMjpeg  ? 'none' : '';
+      vpBitrateVal.style.display   = isMjpeg  ? 'none' : '';
+      vpQualityLabel.style.display = !isMjpeg ? 'none' : '';
+      vpQualityEl.style.display    = !isMjpeg ? 'none' : '';
+      vpQualityVal.style.display   = !isMjpeg ? 'none' : '';
+
+      // Populate sliders from stored params
+      const res = closestRes(videoParams.width || 480, videoParams.height || 360);
+      vpResEl.value     = res;
+      vpFpsEl.value     = videoParams.fps     || 20;
+      vpBitrateEl.value = videoParams.bitrate || 350;
+      vpQualityEl.value = videoParams.quality || 20;
+      updateVideoLabels();
+
+      videoModal.classList.add('open');
+    }
+
+    function closeVideo() { videoModal.classList.remove('open'); }
+
+    function updateVideoLabels() {
+      vpFpsVal.textContent     = vpFpsEl.value + ' fps';
+      vpBitrateVal.textContent = vpBitrateEl.value + ' kbps';
+      vpQualityVal.textContent = vpQualityEl.value;
+    }
+
+    [vpFpsEl, vpBitrateEl, vpQualityEl].forEach(el =>
+      el.addEventListener('input', updateVideoLabels)
+    );
+
+    function applyVideo() {
+      const [w, h] = vpResEl.value.split('x').map(Number);
+      videoParams = {
+        width:   w,
+        height:  h,
+        fps:     Number(vpFpsEl.value),
+        bitrate: Number(vpBitrateEl.value),
+        quality: Number(vpQualityEl.value),
+      };
+      localStorage.setItem('picar-video', JSON.stringify(videoParams));
+      socket.emit('setVideoParams', videoParams);
+      closeVideo();
+    }
 
     // ── Device / control mode ─────────────────────────────────────────────────
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);

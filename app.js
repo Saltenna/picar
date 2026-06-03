@@ -90,6 +90,13 @@ io.on('connection', (socket) => {
   socket.on('arm',    () => { console.log('ARM');    if (typeof pwm.arm    === 'function') pwm.arm();    });
   socket.on('disarm', () => { console.log('DISARM'); if (typeof pwm.disarm === 'function') pwm.disarm(); });
 
+  socket.on('setVideoParams', (params) => {
+    console.log('setVideoParams:', params);
+    stream.setParams(params);
+    // Re-broadcast updated config to all connected clients
+    setTimeout(() => io.emit('streamConfig', stream.getStreamConfig()), 600);
+  });
+
   socket.on('fromclient', (data) => {
     logcount++;
     const throttleCmd = Number.isFinite(data.throttle)

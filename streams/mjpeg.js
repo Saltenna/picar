@@ -7,10 +7,10 @@ const JPEG_START = Buffer.from([0xff, 0xd8]);
 const JPEG_END   = Buffer.from([0xff, 0xd9]);
 
 module.exports = function createMjpegStream(config, streamServer) {
-  const WIDTH   = config.mjpeg_width     || 480;
-  const HEIGHT  = config.mjpeg_height    || 360;
-  const FPS     = config.mjpeg_framerate || 12;
-  const QUALITY = config.mjpeg_quality   || 20;
+  let WIDTH   = config.mjpeg_width     || 480;
+  let HEIGHT  = config.mjpeg_height    || 360;
+  let FPS     = config.mjpeg_framerate || 12;
+  let QUALITY = config.mjpeg_quality   || 20;
 
   let cameraCmd = null;
   for (const cmd of ['rpicam-vid', 'libcamera-vid']) {
@@ -117,8 +117,16 @@ module.exports = function createMjpegStream(config, streamServer) {
   return {
     clientCount,
     stop,
+    setParams(params) {
+      if (params.width   !== undefined) WIDTH   = params.width;
+      if (params.height  !== undefined) HEIGHT  = params.height;
+      if (params.fps     !== undefined) FPS     = params.fps;
+      if (params.quality !== undefined) QUALITY = params.quality;
+      stop();
+      if (clientCount() > 0) setTimeout(start, 500);
+    },
     getStreamConfig() {
-      return { codec: 'mjpeg' };
+      return { codec: 'mjpeg', width: WIDTH, height: HEIGHT, fps: FPS, quality: QUALITY };
     },
   };
 };

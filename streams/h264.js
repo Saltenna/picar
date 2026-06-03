@@ -79,11 +79,11 @@ class NalParser {
 
 // ── Module factory ────────────────────────────────────────────────────────────
 module.exports = function createH264Stream(config, streamServer) {
-  const WIDTH   = config.h264_width        || 640;
-  const HEIGHT  = config.h264_height       || 480;
-  const FPS     = config.h264_framerate    || 30;
-  const BITRATE = (config.h264_bitrate_kbps || 600) * 1000;
-  const INTRA   = config.h264_intra_period || 15;
+  let WIDTH   = config.h264_width        || 640;
+  let HEIGHT  = config.h264_height       || 480;
+  let FPS     = config.h264_framerate    || 30;
+  let BITRATE = (config.h264_bitrate_kbps || 600) * 1000;
+  let INTRA   = config.h264_intra_period || 15;
 
   // Detect rpicam-vid (Pi 5+) or libcamera-vid (Pi 4)
   let cameraCmd = null;
@@ -233,8 +233,16 @@ module.exports = function createH264Stream(config, streamServer) {
   return {
     clientCount,
     stop,
+    setParams(params) {
+      if (params.width   !== undefined) WIDTH   = params.width;
+      if (params.height  !== undefined) HEIGHT  = params.height;
+      if (params.fps     !== undefined) FPS     = params.fps;
+      if (params.bitrate !== undefined) BITRATE = params.bitrate * 1000;
+      stop();
+      if (clientCount() > 0) setTimeout(start, 500);
+    },
     getStreamConfig() {
-      return { codec: 'avc1.42001f', width: WIDTH, height: HEIGHT, fps: FPS };
+      return { codec: 'avc1.42001f', width: WIDTH, height: HEIGHT, fps: FPS, bitrate: Math.round(BITRATE / 1000) };
     },
   };
 };
