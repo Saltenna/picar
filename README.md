@@ -215,25 +215,40 @@ python3 -m http.server 8000
 
 Then on each client device browse to `http://<pi-ip>:8000/ca.crt`.
 
-#### 3 — Install ca.crt on iPhone / iPad (Safari)
+#### 3 — Install ca.crt on Linux (Chrome / Firefox)
+
+```bash
+# Chrome / Chromium — add to the system NSS shared DB
+certutil -d sql:$HOME/.pki/nssdb -A -t "CT,," -n "PiCar Local CA" -i ca.crt
+
+# Firefox — add to its own cert store
+certutil -d sql:$HOME/.mozilla/firefox/*.default-release -A -t "CT,," -n "PiCar Local CA" -i ca.crt
+
+# System-wide (Debian / Ubuntu / Raspberry Pi OS) — affects curl, wget, etc.
+sudo cp ca.crt /usr/local/share/ca-certificates/picar-ca.crt
+sudo update-ca-certificates
+```
+
+> `certutil` comes from the `libnss3-tools` package: `sudo apt install libnss3-tools`
+
+#### 4 — Install ca.crt on iPhone / iPad (Safari)
 
 1. Open `http://<pi-ip>:8000/ca.crt` in Safari — iOS prompts **"Profile Downloaded"** → tap **Close**
 2. **Settings → General → VPN & Device Management** → tap **PiCar Local CA** → **Install** → enter passcode → **Install**
 3. **Settings → General → About → Certificate Trust Settings** → toggle on **PiCar Local CA** → **Continue**
 
-#### 4 — Install ca.crt on Android (Chrome)
+#### 5 — Install ca.crt on Android (Chrome)
 
 1. Download `ca.crt` from the Pi
 2. **Settings → Security → Encryption & credentials → Install a certificate → CA certificate** → select the file
 
-#### 5 — Install ca.crt on macOS (Safari / Chrome)
+#### 6 — Install ca.crt on macOS (Safari / Chrome)
 
 ```bash
-# Double-click ca.crt, or:
 sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt
 ```
 
-#### 6 — Install ca.crt on Windows (Edge / Chrome)
+#### 7 — Install ca.crt on Windows (Edge / Chrome)
 
 1. Double-click `ca.crt` → **Install Certificate**
 2. Select **Local Machine** → **Place all certificates in the following store** → **Trusted Root Certification Authorities** → **Finish**
