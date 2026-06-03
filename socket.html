@@ -49,7 +49,7 @@
       font-family: monospace;
       font-size: 12px;
       color: #fff;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(0, 0, 0, 0.20);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
       border-radius: 6px;
@@ -1096,7 +1096,6 @@
       const betadeg = event.beta, gammadeg = event.gamma;
       throttleValue = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
       steeringValue = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
-      renderStatusBar();
     }
 
     // ── Virtual joysticks ─────────────────────────────────────────────────────
@@ -1115,14 +1114,12 @@
         thumbEl.style.top  = (baseRadius + dy) + 'px';
         if (axis === 'throttle') throttleValue = -(dy / maxDist);
         else                     steeringValue  =   dx / maxDist;
-        renderStatusBar();
       }
 
       function resetThumb() {
         thumbEl.style.left = '50%'; thumbEl.style.top = '50%';
         thumbEl.style.transform = 'translate(-50%, -50%)';
         if (axis === 'throttle') throttleValue = 0; else steeringValue = 0;
-        renderStatusBar();
       }
 
       zoneEl.addEventListener('touchstart', (e) => {
@@ -1177,7 +1174,6 @@
         else if (keysDown['KeyD'] || keysDown['ArrowRight']) steeringValue = Math.min( 1, steeringValue + KEY_STEERING_STEP);
         else { if (Math.abs(steeringValue) < KEY_STEERING_STEP) steeringValue = 0; else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP; }
 
-        renderStatusBar();
       }, 50);
     }
 
@@ -1185,7 +1181,7 @@
       if (controlMode !== 'keyboard') return;
       if (e.code === 'Space') {
         e.preventDefault(); throttleValue = 0; steeringValue = 0;
-        sendControlValues(); renderStatusBar(); return;
+        sendControlValues(); return;
       }
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { e.preventDefault(); toggleShift(); return; }
       if (!keysDown[e.code]) { keysDown[e.code] = true; startKeyboardLoop(); }
