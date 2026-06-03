@@ -22,9 +22,22 @@
 
   "comment3": "stream_codec: 'webrtc' uses MediaMTX (https://host:8889/cam). Fallbacks: 'h264' or 'mjpeg'.",
   "stream_codec": "webrtc",
+
   "webrtc_protocol": "https",
   "webrtc_port": 8889,
+  "webrtc_udp_port": 8189,
   "webrtc_path": "cam",
+  "webrtc_cam_id": 0,
+  "webrtc_width": 480,
+  "webrtc_height": 360,
+  "webrtc_fps": 20,
+  "webrtc_bitrate_kbps": 350,
+  "webrtc_idr_period": 10,
+  "webrtc_codec": "hardwareH264",
+  "webrtc_h264_profile": "baseline",
+  "webrtc_h264_level": "4.1",
+  "webrtc_denoise": "cdn_fast",
+
   "h264_width": 640,
   "h264_height": 480,
   "h264_framerate": 30,

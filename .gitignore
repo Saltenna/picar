@@ -2,3 +2,4 @@ node_modules/
 /.npmrc
 /node_modules*/
 /bin/
+mediamtx.yml
