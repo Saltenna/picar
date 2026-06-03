@@ -102,6 +102,10 @@ module.exports = function createH264Stream(config, streamServer) {
   let frameCount  = 0;
   let cameraProc  = null;
 
+  // ── Stats counters (reset each time getStats() is called) ─────────────────
+  let statTxBytes = 0;
+  let statFrames  = 0;
+
   function clientCount() { return wsClients.size + wsPending.size; }
 
   function broadcast(data, isKeyframe) {
@@ -111,6 +115,8 @@ module.exports = function createH264Stream(config, streamServer) {
     hdr.writeUInt32BE(frameCount, 1);
     frameCount = (frameCount + 1) >>> 0;
     const pkt = Buffer.concat([hdr, data]);
+    statTxBytes += pkt.length * (wsClients.size + (isKeyframe ? wsPending.size : 0));
+    statFrames++;
 
     for (const ws of wsClients) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -233,6 +239,12 @@ module.exports = function createH264Stream(config, streamServer) {
   return {
     clientCount,
     stop,
+    getStats() {
+      const s = { txBytes: statTxBytes, frames: statFrames };
+      statTxBytes = 0;
+      statFrames  = 0;
+      return s;
+    },
     getStreamConfig() {
       return { codec: 'avc1.42001f', width: WIDTH, height: HEIGHT, fps: FPS };
     },

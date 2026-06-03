@@ -24,15 +24,24 @@ module.exports = function createMjpegStream(config, streamServer) {
   let cameraProc = null;
   let jpegBuf    = Buffer.alloc(0);
 
+  let statTxBytes = 0;
+  let statFrames  = 0;
+
   function clientCount() { return clients.length; }
 
   function broadcast(frame) {
     const hdr = `--ffserver\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`;
+    let sent = 0;
     for (let i = clients.length - 1; i >= 0; i--) {
       const c = clients[i];
-      try { if (!c.writableEnded) { c.write(hdr); c.write(frame); c.write('\r\n'); } }
-      catch (_) { clients.splice(i, 1); }
+      try {
+        if (!c.writableEnded) {
+          c.write(hdr); c.write(frame); c.write('\r\n');
+          sent++;
+        }
+      } catch (_) { clients.splice(i, 1); }
     }
+    if (sent > 0) { statTxBytes += (hdr.length + frame.length + 2) * sent; statFrames++; }
   }
 
   function stop() {
@@ -117,6 +126,12 @@ module.exports = function createMjpegStream(config, streamServer) {
   return {
     clientCount,
     stop,
+    getStats() {
+      const s = { txBytes: statTxBytes, frames: statFrames };
+      statTxBytes = 0;
+      statFrames  = 0;
+      return s;
+    },
     getStreamConfig() {
       return { codec: 'mjpeg' };
     },
