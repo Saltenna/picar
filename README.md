@@ -183,6 +183,63 @@ The repo keeps the older streams as diagnostics:
 
 The MediaMTX config lives at `mediamtx.yml`. The default is a stability-first `480x360@20fps`, 350 kbps H.264 baseline, IDR every 10 frames. If fast motion still freezes the feed, reduce `rpiCameraBitrate` further or switch `rpiCameraCodec` from `hardwareH264` to `softwareH264` for a test run.
 
+### HTTPS Certificates
+
+The app runs on HTTPS, which browsers require before they will allow camera access, WebSockets, and WebRTC. Out of the box the repo ships no certificates — you must generate them once per Pi.
+
+The `certs/setup-certs.sh` script creates:
+- a **local CA** (`ca.crt`) that you install on your devices once
+- a **server certificate** (`cert.pem` + `key.pem`) signed by that CA
+
+Once the CA is trusted, Safari, Chrome, and Firefox accept the picar servers with no warning or manual cert-acceptance popup.
+
+#### 1 — Generate certificates on the Pi
+
+```bash
+cd /path/to/picar/certs
+bash setup-certs.sh
+```
+
+The script prompts for your Pi's IP address or hostname (e.g. `192.168.1.42` or `picar.local`) and writes `ca.crt`, `cert.pem`, and `key.pem` into the `certs/` directory.
+
+> **If your Pi's IP changes** re-run the script and restart the app. You do **not** need to reinstall `ca.crt` on your devices — only the server cert needs to change.
+
+#### 2 — Serve ca.crt so devices can download it
+
+A quick way to make `ca.crt` available over the local network:
+
+```bash
+cd /path/to/picar/certs
+python3 -m http.server 8000
+```
+
+Then on each client device browse to `http://<pi-ip>:8000/ca.crt`.
+
+#### 3 — Install ca.crt on iPhone / iPad (Safari)
+
+1. Open `http://<pi-ip>:8000/ca.crt` in Safari — iOS prompts **"Profile Downloaded"** → tap **Close**
+2. **Settings → General → VPN & Device Management** → tap **PiCar Local CA** → **Install** → enter passcode → **Install**
+3. **Settings → General → About → Certificate Trust Settings** → toggle on **PiCar Local CA** → **Continue**
+
+#### 4 — Install ca.crt on Android (Chrome)
+
+1. Download `ca.crt` from the Pi
+2. **Settings → Security → Encryption & credentials → Install a certificate → CA certificate** → select the file
+
+#### 5 — Install ca.crt on macOS (Safari / Chrome)
+
+```bash
+# Double-click ca.crt, or:
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt
+```
+
+#### 6 — Install ca.crt on Windows (Edge / Chrome)
+
+1. Double-click `ca.crt` → **Install Certificate**
+2. Select **Local Machine** → **Place all certificates in the following store** → **Trusted Root Certification Authorities** → **Finish**
+
+---
+
 ### Running the Application
 ```bash
 sudo systemctl start mediamtx
