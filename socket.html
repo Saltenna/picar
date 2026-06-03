@@ -6,10 +6,8 @@
   <title>Pi Car Control</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100vw;
-      height: 100vh;
+      margin: 0; padding: 0;
+      width: 100vw; height: 100vh;
       overflow: hidden;
       background: black;
       color: white;
@@ -17,282 +15,313 @@
     }
 
     #live {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
       object-fit: cover;
-    }
-
-    /* H264 canvas — same footprint as the MJPEG img; hidden until H264 mode starts */
-    #liveCanvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
       display: none;
     }
-
+    #liveCanvas {
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      display: none;
+    }
     #webrtcVideo {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
       display: none;
       background: black;
       object-fit: cover;
     }
 
-    #status {
+    /* ── Status bar ──────────────────────────────────────────────────────────── */
+    #statusBar {
       position: fixed;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-size: 14px;
+      bottom: 15px; left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 15px;
+      box-sizing: border-box;
       z-index: 100;
+      pointer-events: none;
     }
-
-    #feedback {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-size: 14px;
-      text-align: right;
-      z-index: 100;
+    .status-col {
+      font-family: monospace;
+      font-size: 12px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border-radius: 6px;
+      padding: 4px 8px;
+      line-height: 1.7;
+      white-space: nowrap;
     }
+    .status-col:empty { display: none; }
 
-    #enableBtn {
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 10px 20px;
+    /* ── Config modal ────────────────────────────────────────────────────────── */
+    #configModal {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.88);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    #configModal.open { display: flex; }
+    .config-inner {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 20px 24px 16px;
+      width: min(92vw, 480px);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .config-inner h2 {
+      margin: 0 0 16px 0;
       font-size: 16px;
-      background-color: #444;
+      color: #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .config-inner h2 button {
+      background: none; border: none;
+      color: #888; font-size: 20px;
+      cursor: pointer; padding: 0 4px;
+      line-height: 1;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px 16px;
+      margin-bottom: 16px;
+    }
+    .config-col h3 {
+      font-size: 11px;
+      color: #888;
+      margin: 0 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .config-col label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      margin: 5px 0;
+      cursor: pointer;
+      color: #ccc;
+    }
+    .config-col label input[type=checkbox] {
+      width: 15px; height: 15px;
+      accent-color: #2a7;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .config-section-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 12px 0 6px 0;
+      border-top: 1px solid #333;
+      padding-top: 12px;
+    }
+    .config-btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .config-btn-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #ccc;
+      cursor: pointer;
+    }
+    .config-btn-row label input[type=checkbox] {
+      width: 15px; height: 15px;
+      accent-color: #2a7;
+      cursor: pointer;
+    }
+    .config-close-row {
+      margin-top: 16px;
+      text-align: center;
+    }
+    .config-close-row button {
+      padding: 8px 28px;
+      background: #2a7;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 6px;
+      font-size: 14px;
       cursor: pointer;
-      z-index: 1000;
     }
 
+    /* ── Menu ────────────────────────────────────────────────────────────────── */
     #menuBtn {
-      position: fixed;
-      top: 10px;
-      right: 10px;
+      position: fixed; top: 10px; right: 10px;
       z-index: 1000;
       background: rgba(0, 0, 0, 0.7);
-      border: none;
-      color: white;
-      padding: 8px 12px;
-      font-size: 14px;
-      border-radius: 5px;
-      cursor: pointer;
+      border: none; color: white;
+      padding: 8px 12px; font-size: 14px;
+      border-radius: 5px; cursor: pointer;
     }
-
     #commandMenu {
-      position: fixed;
-      top: 50px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 5px;
-      padding: 10px;
-      display: none;
-      z-index: 1000;
+      position: fixed; top: 50px; right: 10px;
+      background: rgba(0, 0, 0, 0.85);
+      border-radius: 5px; padding: 10px;
+      display: none; z-index: 1000;
+      min-width: 160px;
     }
-
     #commandMenu button {
-      display: block;
-      width: 100%;
-      margin: 5px 0;
-      padding: 6px 10px;
-      background: #333;
-      color: white;
-      border: none;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 14px;
+      display: block; width: 100%;
+      margin: 5px 0; padding: 6px 10px;
+      background: #333; color: white;
+      border: none; border-radius: 3px;
+      cursor: pointer; font-size: 14px;
+      text-align: left;
     }
 
-    /* Virtual joystick styles */
+    /* ── Orientation enable btn ──────────────────────────────────────────────── */
+    #enableBtn {
+      position: fixed; top: 10px; left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px; font-size: 16px;
+      background-color: #444; color: white;
+      border: none; border-radius: 5px;
+      cursor: pointer; z-index: 1000;
+    }
+
+    /* ── Virtual joysticks ───────────────────────────────────────────────────── */
     .joystick-zone {
-      position: fixed;
-      bottom: 30px;
-      width: 150px;
-      height: 150px;
-      z-index: 500;
-      display: none;
+      position: fixed; bottom: 30px;
+      width: 150px; height: 150px;
+      z-index: 500; display: none;
     }
-    #joystickLeft {
-      left: 30px;
-    }
-    #joystickRight {
-      right: 30px;
-    }
+    #joystickLeft  { left: 30px; }
+    #joystickRight { right: 30px; }
     .joystick-base {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.15);
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.3);
       position: relative;
     }
     .joystick-thumb {
-      width: 50px;
-      height: 50px;
+      width: 50px; height: 50px;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.5);
-      position: absolute;
-      top: 50%;
-      left: 50%;
+      background: rgba(255,255,255,0.5);
+      position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
     .joystick-label {
-      text-align: center;
-      font-size: 12px;
-      margin-top: 5px;
-      opacity: 0.6;
+      text-align: center; font-size: 12px;
+      margin-top: 5px; opacity: 0.6;
     }
 
-    /* Keyboard hint for desktop */
+    /* ── Keyboard hint ───────────────────────────────────────────────────────── */
     #keyboardHint {
-      position: fixed;
-      bottom: 60px;
-      left: 50%;
+      position: fixed; bottom: 60px; left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.6);
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      text-align: center;
-      z-index: 100;
-      display: none;
+      background: rgba(0,0,0,0.6);
+      padding: 10px 20px; border-radius: 8px;
+      font-size: 14px; text-align: center;
+      z-index: 100; display: none;
     }
     #keyboardHint kbd {
       display: inline-block;
-      padding: 3px 7px;
-      background: #555;
-      border-radius: 3px;
-      margin: 0 2px;
+      padding: 3px 7px; background: #555;
+      border-radius: 3px; margin: 0 2px;
       font-family: monospace;
     }
 
-    /* Button strip: centered row above joystick area */
+    /* ── Button strip ────────────────────────────────────────────────────────── */
     #btnStrip {
-      position: fixed;
-      bottom: 190px;
-      left: 50%;
+      position: fixed; bottom: 190px; left: 50%;
       transform: translateX(-50%);
-      display: flex;
-      gap: 6px;
-      z-index: 600;
-      pointer-events: none; /* pass taps through the container gap */
+      display: flex; gap: 6px; z-index: 600;
+      pointer-events: none;
     }
     #btnStrip button {
       pointer-events: auto;
-      padding: 5px 10px;
-      font-size: 11px;
-      font-weight: bold;
-      background: rgba(50, 50, 50, 0.8);
-      color: #aaa;
-      border: 1.5px solid #555;
-      border-radius: 6px;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      white-space: nowrap;
-      line-height: 1.2;
+      padding: 5px 10px; font-size: 11px; font-weight: bold;
+      background: rgba(50,50,50,0.8); color: #aaa;
+      border: 1.5px solid #555; border-radius: 6px;
+      cursor: pointer; user-select: none;
+      -webkit-user-select: none; white-space: nowrap; line-height: 1.2;
     }
-    #btnStrip #shiftBtn.high {
-      background: rgba(0, 160, 80, 0.8);
-      color: white;
-      border-color: #0a6;
-    }
-    #btnStrip .tlock-btn.locked {
-      background: rgba(200, 120, 0, 0.8);
-      color: white;
-      border-color: #c80;
-    }
-    /* Landscape: compact buttons near the bottom of the screen */
+    #btnStrip #shiftBtn.high    { background: rgba(0,160,80,0.8);  color: white; border-color: #0a6; }
+    #btnStrip .tlock-btn.locked { background: rgba(200,120,0,0.8); color: white; border-color: #c80; }
     @media (orientation: landscape) and (max-height: 500px) {
       #btnStrip { bottom: 8px; }
       #btnStrip button { padding: 4px 8px; font-size: 10px; }
     }
 
+    /* ── Stream cert overlay ─────────────────────────────────────────────────── */
     #streamOverlay {
-      position: fixed;
-      top: 0; left: 0;
+      position: fixed; top: 0; left: 0;
       width: 100vw; height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50; background: rgba(0,0,0,0.7);
     }
     #streamOverlay.hidden { display: none; }
     #enableStreamBtn {
-      padding: 15px 30px;
-      font-size: 18px;
-      background: #2a7;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
+      padding: 15px 30px; font-size: 18px;
+      background: #2a7; color: white;
+      border: none; border-radius: 8px; cursor: pointer;
     }
     #streamStatus {
-      color: #aaa;
-      font-size: 14px;
-      margin-top: 10px;
-      text-align: center;
+      color: #aaa; font-size: 14px;
+      margin-top: 10px; text-align: center;
     }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <img id="live" src="" alt="Video stream not available">
+  <img id="live" src="" alt="">
   <canvas id="liveCanvas"></canvas>
   <video id="webrtcVideo" autoplay muted playsinline disablepictureinpicture></video>
-  <div id="status">Status: Connecting...</div>
-  <div id="feedback">Throttle: --<br>Steering: --</div>
+
+  <!-- Status bar: 3 floating columns, bottom of screen -->
+  <div id="statusBar">
+    <div class="status-col" id="statusCol1"></div>
+    <div class="status-col" id="statusCol2"></div>
+    <div class="status-col" id="statusCol3"></div>
+  </div>
+
   <button id="enableBtn" style="display:none;">Enable Orientation</button>
   <button id="menuBtn">☰</button>
+
   <div id="commandMenu">
     <button id="stopBtn" onclick="toggleStop()">Start</button>
     <button onclick="refreshPage()">Refresh Page</button>
     <button id="controlModeBtn" onclick="cycleControlMode()">Control: Auto</button>
+    <button onclick="openConfig()">Config</button>
   </div>
 
-  <!-- Virtual joysticks (touch devices) -->
+  <!-- Virtual joysticks -->
   <div id="joystickLeft" class="joystick-zone">
-    <div class="joystick-base">
-      <div class="joystick-thumb" id="thumbLeft"></div>
-    </div>
+    <div class="joystick-base"><div class="joystick-thumb" id="thumbLeft"></div></div>
     <div class="joystick-label">Throttle</div>
   </div>
   <div id="joystickRight" class="joystick-zone">
-    <div class="joystick-base">
-      <div class="joystick-thumb" id="thumbRight"></div>
-    </div>
+    <div class="joystick-base"><div class="joystick-thumb" id="thumbRight"></div></div>
     <div class="joystick-label">Steering</div>
   </div>
 
-  <!-- Shift / T-Lock button strip (centered above joysticks) -->
+  <!-- Button strip -->
   <div id="btnStrip">
-    <button id="tlockFrontBtn" class="tlock-btn">F.Diff: Open</button>
-    <button id="shiftBtn">Gear: LOW</button>
-    <button id="tlockRearBtn" class="tlock-btn">R.Diff: Open</button>
+    <button id="tlockFrontBtn" class="tlock-btn" style="display:none;">F.Diff: Open</button>
+    <button id="shiftBtn" style="display:none;">Gear: LOW</button>
+    <button id="tlockRearBtn" class="tlock-btn" style="display:none;">R.Diff: Open</button>
   </div>
 
-  <!-- Stream certificate overlay -->
+  <!-- Stream cert overlay -->
   <div id="streamOverlay">
     <div>
       <button id="enableStreamBtn">Enable Video Stream</button>
@@ -300,7 +329,7 @@
     </div>
   </div>
 
-  <!-- Keyboard hint (desktop) -->
+  <!-- Keyboard hint -->
   <div id="keyboardHint">
     <kbd>W</kbd> / <kbd>↑</kbd> Forward &nbsp;
     <kbd>S</kbd> / <kbd>↓</kbd> Reverse<br>
@@ -309,104 +338,214 @@
     <kbd>Space</kbd> Stop
   </div>
 
+  <!-- Config modal -->
+  <div id="configModal">
+    <div class="config-inner">
+      <h2>Config <button onclick="closeConfig()">✕</button></h2>
+
+      <div class="config-grid">
+        <div class="config-col">
+          <h3>Status</h3>
+          <label><input type="checkbox" id="cfgConnected"> Connected</label>
+          <label><input type="checkbox" id="cfgControlMode"> Control mode</label>
+        </div>
+        <div class="config-col">
+          <h3>Network</h3>
+          <label><input type="checkbox" id="cfgDown"> ↓ (video)</label>
+          <label><input type="checkbox" id="cfgUp"> ↑ (control)</label>
+          <label><input type="checkbox" id="cfgFps"> FPS</label>
+        </div>
+        <div class="config-col">
+          <h3>Feedback</h3>
+          <label><input type="checkbox" id="cfgThrottle"> Throttle</label>
+          <label><input type="checkbox" id="cfgSteering"> Steering</label>
+        </div>
+      </div>
+
+      <div class="config-section-label">Buttons</div>
+      <div class="config-btn-row">
+        <label><input type="checkbox" id="cfgBtnGear"> Gear</label>
+        <label><input type="checkbox" id="cfgBtnFrontDiff"> Front diff</label>
+        <label><input type="checkbox" id="cfgBtnRearDiff"> Rear diff</label>
+      </div>
+
+      <div class="config-close-row">
+        <button onclick="closeConfig()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    const hostname = window.location.hostname;
+    const hostname       = window.location.hostname;
     const legacyStreamBase = `https://${hostname}:8081`;
-    const video = document.getElementById('live');
+    const video          = document.getElementById('live');
+    const socket         = io(`https://${hostname}:8443`, { secure: true });
 
-    // Socket.io for controls only (video is on separate port 8081)
-    const socket = io(`https://${hostname}:8443`, { secure: true });
-
-    const statusDiv = document.getElementById('status');
-    const feedbackDiv = document.getElementById('feedback');
-    const enableBtn = document.getElementById('enableBtn');
-    const menuBtn = document.getElementById('menuBtn');
-    const commandMenu = document.getElementById('commandMenu');
-    const stopBtn = document.getElementById('stopBtn');
+    const enableBtn      = document.getElementById('enableBtn');
+    const menuBtn        = document.getElementById('menuBtn');
+    const commandMenu    = document.getElementById('commandMenu');
+    const stopBtn        = document.getElementById('stopBtn');
     const controlModeBtn = document.getElementById('controlModeBtn');
-    const keyboardHint = document.getElementById('keyboardHint');
+    const keyboardHint   = document.getElementById('keyboardHint');
     const joystickLeftEl = document.getElementById('joystickLeft');
-    const joystickRightEl = document.getElementById('joystickRight');
-    const thumbLeft = document.getElementById('thumbLeft');
-    const thumbRight = document.getElementById('thumbRight');
-    const streamOverlay = document.getElementById('streamOverlay');
-    const enableStreamBtn = document.getElementById('enableStreamBtn');
-    const streamStatusDiv = document.getElementById('streamStatus');
-    const webrtcVideo = document.getElementById('webrtcVideo');
+    const joystickRightEl= document.getElementById('joystickRight');
+    const thumbLeft      = document.getElementById('thumbLeft');
+    const thumbRight     = document.getElementById('thumbRight');
+    const streamOverlay  = document.getElementById('streamOverlay');
+    const enableStreamBtn= document.getElementById('enableStreamBtn');
+    const streamStatusDiv= document.getElementById('streamStatus');
+    const webrtcVideo    = document.getElementById('webrtcVideo');
+    const statusCol1     = document.getElementById('statusCol1');
+    const statusCol2     = document.getElementById('statusCol2');
+    const statusCol3     = document.getElementById('statusCol3');
+    const configModal    = document.getElementById('configModal');
 
-    let stopped = true;
-    let wakeLock = null;
+    let stopped     = true;
+    let wakeLock    = null;
+    let isConnected = false;
 
-    // ── Stream setup ─────────────────────────────────────────────────────────
-    // Supports modes decided by the server's streamConfig event:
-    //   'webrtc' → MediaMTX WHEP/WebRTC reader (https://host:8889/cam/whep)
-    //   'avc1.*' → H264 WebSocket (wss://host:8081/stream) decoded via WebCodecs
-    //   'mjpeg'  → classic MJPEG multipart image src (https://host:8081/stream.mjpg)
-    //
-    // ?stream=mjpeg, ?stream=h264, or ?stream=webrtc can force a client mode
-    // for diagnostics, as long as the matching server/service is running.
+    // ── Persistent config ─────────────────────────────────────────────────────
+    const CFG_DEFAULTS = {
+      showConnected:   true,
+      showControlMode: false,
+      showDown:        false,
+      showUp:          false,
+      showFps:         false,
+      showThrottle:    false,
+      showSteering:    false,
+      showBtnGear:     false,
+      showBtnFrontDiff:false,
+      showBtnRearDiff: false,
+    };
 
+    let uiCfg = { ...CFG_DEFAULTS };
+    try {
+      const saved = JSON.parse(localStorage.getItem('picar-config') || '{}');
+      Object.assign(uiCfg, saved);
+    } catch (_) {}
+
+    function saveConfig() {
+      localStorage.setItem('picar-config', JSON.stringify(uiCfg));
+    }
+
+    // ── Config modal ──────────────────────────────────────────────────────────
+    const cfgCheckboxMap = {
+      cfgConnected:    'showConnected',
+      cfgControlMode:  'showControlMode',
+      cfgDown:         'showDown',
+      cfgUp:           'showUp',
+      cfgFps:          'showFps',
+      cfgThrottle:     'showThrottle',
+      cfgSteering:     'showSteering',
+      cfgBtnGear:      'showBtnGear',
+      cfgBtnFrontDiff: 'showBtnFrontDiff',
+      cfgBtnRearDiff:  'showBtnRearDiff',
+    };
+
+    function openConfig() {
+      commandMenu.style.display = 'none';
+      // Sync checkboxes to current config
+      for (const [id, key] of Object.entries(cfgCheckboxMap)) {
+        document.getElementById(id).checked = uiCfg[key];
+      }
+      configModal.classList.add('open');
+    }
+
+    function closeConfig() {
+      // Read checkboxes into config and persist
+      for (const [id, key] of Object.entries(cfgCheckboxMap)) {
+        uiCfg[key] = document.getElementById(id).checked;
+      }
+      saveConfig();
+      configModal.classList.remove('open');
+      applyButtonVisibility();
+      renderStatusBar();
+    }
+
+    function applyButtonVisibility() {
+      document.getElementById('shiftBtn').style.display      = uiCfg.showBtnGear     ? '' : 'none';
+      document.getElementById('tlockFrontBtn').style.display = uiCfg.showBtnFrontDiff ? '' : 'none';
+      document.getElementById('tlockRearBtn').style.display  = uiCfg.showBtnRearDiff  ? '' : 'none';
+    }
+
+    // ── Status bar ────────────────────────────────────────────────────────────
+    let liveStats = { downKbps: null, upKbps: null, fps: null };
+
+    function renderStatusBar() {
+      // Column 1: connection + control mode
+      const c1 = [];
+      if (uiCfg.showConnected)   c1.push(isConnected ? 'Connected' : 'Disconnected');
+      if (uiCfg.showControlMode) c1.push(`Mode: ${controlMode}`);
+      statusCol1.innerHTML = c1.join('<br>');
+
+      // Column 2: network + fps
+      const c2 = [];
+      if (uiCfg.showDown) c2.push(`↓ ${liveStats.downKbps !== null ? liveStats.downKbps + ' kbps' : '--'}`);
+      if (uiCfg.showUp)   c2.push(`↑ ${liveStats.upKbps   !== null ? liveStats.upKbps   + ' kbps' : '--'}`);
+      if (uiCfg.showFps)  c2.push(`FPS: ${liveStats.fps !== null ? liveStats.fps : '--'}`);
+      statusCol2.innerHTML = c2.join('<br>');
+
+      // Column 3: feedback
+      const c3 = [];
+      if (uiCfg.showThrottle) c3.push(`Thr: ${throttleValue.toFixed(2)}`);
+      if (uiCfg.showSteering) c3.push(`Str: ${applyCurve(steeringValue).toFixed(2)}`);
+      statusCol3.innerHTML = c3.join('<br>');
+    }
+
+    // ── Client-side stats ─────────────────────────────────────────────────────
+    // Each stream mode sets activeStreamStats() → Promise<{downKbps, fps}>
+    // ↑ (control) bytes are counted in sendControlValues() regardless of mode.
+    let activeStreamStats = null;
+    let statUpBytes       = 0;
+
+    setInterval(async () => {
+      if (activeStreamStats) {
+        try {
+          const s = await activeStreamStats();
+          liveStats.downKbps = s.downKbps;
+          liveStats.fps      = s.fps;
+        } catch (_) {}
+      }
+      liveStats.upKbps = Math.round(statUpBytes * 8 / 1000);
+      statUpBytes = 0;
+      renderStatusBar();
+    }, 1000);
+
+    // ── Canvas helpers ────────────────────────────────────────────────────────
     const canvasEl  = document.getElementById('liveCanvas');
     const canvasCtx = canvasEl.getContext('2d');
 
-    // Sync canvas pixel dimensions to the physical screen size.
-    // Must be called before each draw or after an orientation/resize event.
     function syncCanvasSize() {
       canvasEl.width  = window.innerWidth;
       canvasEl.height = window.innerHeight;
     }
     window.addEventListener('resize', syncCanvasSize);
 
-    // Draw a VideoFrame onto the canvas using object-fit:cover semantics.
-    function renderH264Frame(frame) {
-      const cw = canvasEl.width,  ch = canvasEl.height;
-      const fw = frame.codedWidth, fh = frame.codedHeight;
-      // Scale so the frame fills the canvas without distortion (crops edges).
-      const scale = Math.max(cw / fw, ch / fh);
-      const dw = fw * scale, dh = fh * scale;
-      canvasCtx.drawImage(frame, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
-      frame.close();
+    function drawToCanvas(source, w, h) {
+      const cw = canvasEl.width, ch = canvasEl.height;
+      const scale = Math.max(cw / w, ch / h);
+      const dw = w * scale, dh = h * scale;
+      canvasCtx.drawImage(source, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
     }
 
-    // ── H264 WebSocket + WebCodecs decoder ───────────────────────────────────
-    let h264Ws       = null;
-    let videoDecoder = null;
-    let webrtcPc = null;
+    // ── WebRTC stream ─────────────────────────────────────────────────────────
+    let webrtcPc         = null;
     let webrtcSessionUrl = null;
-
-    function stopH264Stream() {
-      if (h264Ws) {
-        try { h264Ws.onclose = null; h264Ws.close(); } catch (_) {}
-        h264Ws = null;
-      }
-      if (videoDecoder && videoDecoder.state !== 'closed') {
-        try { videoDecoder.close(); } catch (_) {}
-      }
-      videoDecoder = null;
-    }
-
-    function hideAllVideoSurfaces() {
-      video.style.display = 'none';
-      canvasEl.style.display = 'none';
-      webrtcVideo.style.display = 'none';
-    }
 
     function webrtcWhepUrlFromConfig(cfg) {
       const protocol = cfg.protocol || 'https';
-      const port = cfg.port || 8889;
-      const path = (cfg.path || 'cam').replace(/^\/+/, '');
+      const port     = cfg.port     || 8889;
+      const path     = (cfg.path   || 'cam').replace(/^\/+/, '');
       return `${protocol}://${hostname}:${port}/${path}/whep`;
     }
 
     async function stopWebRTCStream() {
+      activeStreamStats = null;
       if (webrtcSessionUrl) {
         try { await fetch(webrtcSessionUrl, { method: 'DELETE' }); } catch (_) {}
         webrtcSessionUrl = null;
       }
-      if (webrtcPc) {
-        try { webrtcPc.close(); } catch (_) {}
-        webrtcPc = null;
-      }
+      if (webrtcPc) { try { webrtcPc.close(); } catch (_) {} webrtcPc = null; }
       webrtcVideo.srcObject = null;
     }
 
@@ -414,15 +553,9 @@
       if (pc.iceGatheringState === 'complete') return Promise.resolve();
       return new Promise((resolve) => {
         const timeout = setTimeout(done, 5000);
-        function done() {
-          clearTimeout(timeout);
-          pc.removeEventListener('icegatheringstatechange', onStateChange);
-          resolve();
-        }
-        function onStateChange() {
-          if (pc.iceGatheringState === 'complete') done();
-        }
-        pc.addEventListener('icegatheringstatechange', onStateChange);
+        function done() { clearTimeout(timeout); pc.removeEventListener('icegatheringstatechange', onSC); resolve(); }
+        function onSC() { if (pc.iceGatheringState === 'complete') done(); }
+        pc.addEventListener('icegatheringstatechange', onSC);
       });
     }
 
@@ -436,30 +569,23 @@
       const whepUrl = cfg.url || webrtcWhepUrlFromConfig(cfg);
       const pc = new RTCPeerConnection({ iceServers: [] });
       webrtcPc = pc;
-
       pc.addTransceiver('video', { direction: 'recvonly' });
 
       pc.ontrack = (evt) => {
         if (evt.streams && evt.streams[0]) {
           webrtcVideo.srcObject = evt.streams[0];
-          // Explicit play() needed when srcObject is set after element is attached;
-          // the `autoplay` attribute handles most cases but this is a safety net.
           webrtcVideo.play().catch(() => {});
         }
       };
 
-      // Reconnect automatically when ICE fails.
-      // 'disconnected' can recover on its own — only 'failed' is unrecoverable.
-      // This keeps the video live through brief radio dropouts without operator action.
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
         console.log('WebRTC connection state:', s);
         if (s === 'failed') {
-          console.log('WebRTC ICE failed — tearing down and reconnecting in 3 s…');
+          console.log('WebRTC ICE failed — reconnecting in 3 s…');
           stopWebRTCStream().then(() => {
-            if (pendingStreamCfg && pendingStreamCfg.codec === 'webrtc') {
+            if (pendingStreamCfg && pendingStreamCfg.codec === 'webrtc')
               setTimeout(() => setupWebRTCStream(pendingStreamCfg).catch(console.error), 3000);
-            }
           });
         }
       };
@@ -477,9 +603,40 @@
 
       const location = res.headers.get('location');
       if (location) webrtcSessionUrl = new URL(location, whepUrl).toString();
+      await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
 
-      const answer = await res.text();
-      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      // Stats via RTCPeerConnection.getStats() — inbound-rtp gives received bytes + frames
+      let lastBytes  = 0;
+      let lastFrames = 0;
+      let statsInit  = false;
+      activeStreamStats = async () => {
+        if (!webrtcPc) return { downKbps: null, fps: null };
+        const stats = await webrtcPc.getStats();
+        let downKbps = null, fps = null;
+        stats.forEach(r => {
+          if (r.type === 'inbound-rtp' && r.kind === 'video') {
+            if (statsInit) {
+              downKbps = Math.round((r.bytesReceived  - lastBytes)  * 8 / 1000);
+              fps      = r.framesDecoded - lastFrames;
+            }
+            lastBytes  = r.bytesReceived;
+            lastFrames = r.framesDecoded;
+            statsInit  = true;
+          }
+        });
+        return { downKbps, fps };
+      };
+    }
+
+    // ── H264 WebSocket + WebCodecs stream ─────────────────────────────────────
+    let h264Ws       = null;
+    let videoDecoder = null;
+
+    function stopH264Stream() {
+      activeStreamStats = null;
+      if (h264Ws) { try { h264Ws.onclose = null; h264Ws.close(); } catch (_) {} h264Ws = null; }
+      if (videoDecoder && videoDecoder.state !== 'closed') { try { videoDecoder.close(); } catch (_) {} }
+      videoDecoder = null;
     }
 
     function setupH264Stream(cfg) {
@@ -490,135 +647,95 @@
       syncCanvasSize();
 
       if (!('VideoDecoder' in window)) {
-        // Browser doesn't support WebCodecs — show a clear error.
         streamOverlay.classList.remove('hidden');
-        enableStreamBtn.style.display  = 'none';
+        enableStreamBtn.style.display = 'none';
         streamStatusDiv.innerHTML =
           'H.264 requires Chrome / Edge or iOS Safari 16.4+.<br>' +
-          'Switch the server to MJPEG mode (<code>stream_codec: "mjpeg"</code>) ' +
-          'or use a supported browser.';
+          'Switch the server to MJPEG mode (<code>stream_codec: "mjpeg"</code>) or use a supported browser.';
         return;
       }
 
       let decoderReady = false;
       let decodeTs     = 0;
-      const tsStep     = Math.round(1_000_000 / (cfg.fps || 30));  // µs per frame
+      const tsStep     = Math.round(1_000_000 / (cfg.fps || 30));
 
-      // Parse the SPS NAL unit inside a keyframe packet to derive the exact
-      // codec string (avc1.PPCCLL) that matches the encoder output.
-      // This avoids the level/profile mismatch that makes WebCodecs reject the IDR
-      // (e.g. declared avc1.42001f vs actual avc1.428028 from Pi 4 VideoCore IV).
+      let h264StatBytes  = 0;
+      let h264StatFrames = 0;
+      activeStreamStats = () => {
+        const s = { downKbps: Math.round(h264StatBytes * 8 / 1000), fps: h264StatFrames };
+        h264StatBytes = 0; h264StatFrames = 0;
+        return Promise.resolve(s);
+      };
+
       function parseSPSCodec(buf) {
         const u8 = new Uint8Array(buf);
-        const toHex2 = n => n.toString(16).padStart(2, '0');
+        const h = n => n.toString(16).padStart(2, '0');
         for (let i = 0; i < u8.length - 4; i++) {
-          // Match 4-byte start code 00 00 00 01
-          if (u8[i] === 0 && u8[i+1] === 0 && u8[i+2] === 0 && u8[i+3] === 1) {
-            if ((u8[i+4] & 0x1f) === 7 && i + 7 < u8.length) {
-              return `avc1.${toHex2(u8[i+5])}${toHex2(u8[i+6])}${toHex2(u8[i+7])}`;
-            }
+          if (u8[i]===0 && u8[i+1]===0 && u8[i+2]===0 && u8[i+3]===1) {
+            if ((u8[i+4] & 0x1f) === 7 && i+7 < u8.length) return `avc1.${h(u8[i+5])}${h(u8[i+6])}${h(u8[i+7])}`;
           }
-          // Match 3-byte start code 00 00 01
-          if (u8[i] === 0 && u8[i+1] === 0 && u8[i+2] === 1) {
-            if ((u8[i+3] & 0x1f) === 7 && i + 6 < u8.length) {
-              return `avc1.${toHex2(u8[i+4])}${toHex2(u8[i+5])}${toHex2(u8[i+6])}`;
-            }
+          if (u8[i]===0 && u8[i+1]===0 && u8[i+2]===1) {
+            if ((u8[i+3] & 0x1f) === 7 && i+6 < u8.length) return `avc1.${h(u8[i+4])}${h(u8[i+5])}${h(u8[i+6])}`;
           }
         }
-        // Fallback to known Pi 4 VideoCore IV codec string
         return 'avc1.428028';
       }
 
       function initDecoder(codecStr) {
-        if (videoDecoder && videoDecoder.state !== 'closed') {
-          try { videoDecoder.reset(); } catch (_) {}
-        }
+        if (videoDecoder && videoDecoder.state !== 'closed') { try { videoDecoder.reset(); } catch (_) {} }
         videoDecoder = new VideoDecoder({
           output: (frame) => {
-            // If the decode queue is growing (network burst / slow render) drop
-            // non-rendered frames to prevent the classic freeze-then-catch-up.
             if (videoDecoder.decodeQueueSize > 2) { frame.close(); return; }
-            renderH264Frame(frame);
+            drawToCanvas(frame, frame.codedWidth, frame.codedHeight);
+            frame.close();
+            h264StatFrames++;
           },
-          error: (err) => {
-            console.warn('VideoDecoder error:', err.message);
-            decoderReady = false;
-            // Do NOT send requestKeyframe here — it triggers the encoder-restart
-            // loop.  The --intra 15 setting guarantees an IDR every ~0.5 s.
-          },
+          error: (err) => { console.warn('VideoDecoder error:', err.message); decoderReady = false; },
         });
-
         try {
           videoDecoder.configure({
-            codec:                codecStr,
-            codedWidth:           cfg.width  || 640,
-            codedHeight:          cfg.height || 480,
+            codec: codecStr,
+            codedWidth:  cfg.width  || 640,
+            codedHeight: cfg.height || 480,
             hardwareAcceleration: 'prefer-hardware',
-            optimizeForLatency:   true,   // minimise internal decoder buffering
+            optimizeForLatency: true,
           });
           decoderReady = true;
-          console.log('VideoDecoder configured with codec:', codecStr);
-        } catch (e) {
-          console.error('VideoDecoder configure error:', e);
-          decoderReady = false;
-        }
+          console.log('VideoDecoder configured:', codecStr);
+        } catch (e) { console.error('VideoDecoder configure error:', e); decoderReady = false; }
       }
-
-      // Decoder is NOT initialised here — we wait for the first keyframe so we
-      // can parse the SPS NAL and derive the exact codec string.
 
       function connectWs() {
         if (h264Ws) { try { h264Ws.close(); } catch (_) {} }
-
-        // keyframeReceived: guards against the decoder receiving delta (P) frames
-        // before its first IDR.  The server already gates new connections to
-        // keyframes-only (wsPending), but this flag is a belt-and-suspenders
-        // safety net and is also needed after a decoder reset.
         let keyframeReceived = false;
-        let lastKfRequest    = 0;         // rate-limit requestKeyframe messages
+        let lastKfRequest    = 0;
 
         h264Ws = new WebSocket(`wss://${hostname}:8081/stream`);
         h264Ws.binaryType = 'arraybuffer';
 
-        h264Ws.onopen = () => {
-          console.log('H264 WebSocket connected');
-          decodeTs = 0;
-          keyframeReceived = false;
-        };
+        h264Ws.onopen = () => { console.log('H264 WS connected'); decodeTs = 0; keyframeReceived = false; };
 
         h264Ws.onmessage = (evt) => {
           const buf = evt.data;
           if (!(buf instanceof ArrayBuffer) || buf.byteLength < 5) return;
+          h264StatBytes += buf.byteLength;
 
-          // Packet layout: [flags:1][frameNum:4][h264-annexb-data]
-          const view     = new DataView(buf);
-          const isKey    = (view.getUint8(0) & 0x01) !== 0;
+          const view  = new DataView(buf);
+          const isKey = (view.getUint8(0) & 0x01) !== 0;
           const h264Data = buf.slice(5);
 
-          // On the FIRST keyframe: parse the SPS to get the real codec string,
-          // then initialise the decoder.  Deferring until here avoids the
-          // level/profile mismatch (avc1.42001f declared vs avc1.428028 actual)
-          // that caused WebCodecs to reject the first IDR immediately.
           if (!keyframeReceived) {
             if (!isKey) return;
-            const detectedCodec = parseSPSCodec(h264Data);
-            console.log('Detected codec from SPS:', detectedCodec);
-            initDecoder(detectedCodec);
+            initDecoder(parseSPSCodec(h264Data));
             if (!decoderReady) return;
             keyframeReceived = true;
           }
-
-          // Re-initialise decoder after an error; only safe on a keyframe.
           if (!decoderReady) {
             if (!isKey) return;
-            const detectedCodec = parseSPSCodec(h264Data);
-            initDecoder(detectedCodec);
+            initDecoder(parseSPSCodec(h264Data));
             if (!decoderReady) return;
             keyframeReceived = true;
           }
-
-          // Drop non-keyframes when the decode queue is already deep — this
-          // prevents the latency snowball that causes the freeze→burst pattern.
           if (!isKey && videoDecoder.decodeQueueSize > 2) return;
 
           try {
@@ -630,10 +747,7 @@
             decodeTs += tsStep;
           } catch (e) {
             console.warn('Decode chunk error:', e);
-            decoderReady    = false;
-            keyframeReceived = false;
-            // Request a keyframe but rate-limit to once per 5 s to avoid
-            // triggering the encoder-restart loop seen in initial testing.
+            decoderReady = false; keyframeReceived = false;
             const now = Date.now();
             if (now - lastKfRequest > 5000 && h264Ws.readyState === WebSocket.OPEN) {
               lastKfRequest = now;
@@ -642,12 +756,10 @@
           }
         };
 
-        h264Ws.onerror = () => console.warn('H264 WebSocket error');
-
+        h264Ws.onerror = () => console.warn('H264 WS error');
         h264Ws.onclose = () => {
-          console.log('H264 WebSocket closed — reconnecting in 2 s');
-          decoderReady    = false;
-          keyframeReceived = false;
+          console.log('H264 WS closed — reconnecting in 2 s');
+          decoderReady = false; keyframeReceived = false;
           setTimeout(connectWs, 2000);
         };
       }
@@ -655,7 +767,89 @@
       connectWs();
     }
 
-    // ── startStream: dispatch to H264 or MJPEG ───────────────────────────────
+    // ── MJPEG stream (fetch + ReadableStream for byte counting) ───────────────
+    let mjpegAbort = null;
+
+    function stopMjpegStream() {
+      activeStreamStats = null;
+      if (mjpegAbort) { mjpegAbort.abort(); mjpegAbort = null; }
+    }
+
+    async function setupMjpegStream() {
+      stopH264Stream();
+      await stopWebRTCStream();
+      stopMjpegStream();
+      hideAllVideoSurfaces();
+      canvasEl.style.display = 'block';
+      syncCanvasSize();
+      streamOverlay.classList.add('hidden');
+
+      mjpegAbort = new AbortController();
+      let mjpegStatBytes  = 0;
+      let mjpegStatFrames = 0;
+      activeStreamStats = () => {
+        const s = { downKbps: Math.round(mjpegStatBytes * 8 / 1000), fps: mjpegStatFrames };
+        mjpegStatBytes = 0; mjpegStatFrames = 0;
+        return Promise.resolve(s);
+      };
+
+      let buf = new Uint8Array(0);
+
+      const pump = async () => {
+        const res = await fetch(`${legacyStreamBase}/stream.mjpg`, { signal: mjpegAbort.signal });
+        const reader = res.body.getReader();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          mjpegStatBytes += value.byteLength;
+
+          // Append chunk to buffer
+          const merged = new Uint8Array(buf.length + value.length);
+          merged.set(buf); merged.set(value, buf.length);
+          buf = merged;
+
+          // Extract complete JPEGs (FF D8 ... FF D9)
+          while (true) {
+            let s = -1;
+            for (let i = 0; i < buf.length - 1; i++) {
+              if (buf[i] === 0xff && buf[i+1] === 0xd8) { s = i; break; }
+            }
+            if (s === -1) { buf = new Uint8Array(0); break; }
+            if (s > 0) buf = buf.subarray(s);
+            let e = -1;
+            for (let i = 2; i < buf.length - 1; i++) {
+              if (buf[i] === 0xff && buf[i+1] === 0xd9) { e = i + 1; break; }
+            }
+            if (e === -1) break;
+
+            const jpeg = buf.slice(0, e + 1);
+            buf = buf.subarray(e + 1);
+            mjpegStatFrames++;
+
+            // Decode and draw frame
+            try {
+              const bitmap = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
+              drawToCanvas(bitmap, bitmap.width, bitmap.height);
+              bitmap.close();
+            } catch (_) {}
+          }
+        }
+      };
+
+      pump().catch(e => {
+        if (e.name === 'AbortError') return;
+        console.warn('MJPEG fetch error:', e);
+        setTimeout(setupMjpegStream, 2000);
+      });
+    }
+
+    // ── Stream dispatch ───────────────────────────────────────────────────────
+    function hideAllVideoSurfaces() {
+      video.style.display = 'none';
+      canvasEl.style.display = 'none';
+      webrtcVideo.style.display = 'none';
+    }
+
     function startStream(cfg) {
       if (cfg && cfg.codec === 'webrtc') {
         setupWebRTCStream(cfg).catch((err) => {
@@ -667,20 +861,11 @@
       } else if (cfg && cfg.codec !== 'mjpeg') {
         setupH264Stream(cfg);
       } else {
-        stopH264Stream();
-        stopWebRTCStream();
-        hideAllVideoSurfaces();
-        video.style.display = 'block';
-        video.src = `${legacyStreamBase}/stream.mjpg`;
-        streamOverlay.classList.add('hidden');
+        setupMjpegStream();
       }
     }
 
     // ── Certificate acceptance flow ───────────────────────────────────────────
-    // The video service uses the same self-signed cert as the control server.
-    // The browser must accept it on the video port before HTTPS/WSS/WebRTC works.
-    // We probe with a no-cors fetch; if it fails the user taps the overlay
-    // button which opens the cert page in a popup.
     let streamCertOk    = false;
     let pendingStreamCfg = null;
     let pendingProbeUrl  = null;
@@ -690,8 +875,8 @@
     const requestedStream = new URLSearchParams(window.location.search).get('stream');
 
     function normalizeStreamConfig(cfg) {
-      if (requestedStream === 'mjpeg') return { codec: 'mjpeg' };
-      if (requestedStream === 'h264') return { codec: 'avc1.42001f', width: cfg.width, height: cfg.height, fps: cfg.fps };
+      if (requestedStream === 'mjpeg')  return { codec: 'mjpeg' };
+      if (requestedStream === 'h264')   return { codec: 'avc1.42001f', width: cfg.width, height: cfg.height, fps: cfg.fps };
       if (requestedStream === 'webrtc') return { codec: 'webrtc', protocol: cfg.protocol, port: cfg.port, path: cfg.path, url: cfg.url };
       return cfg;
     }
@@ -699,19 +884,13 @@
     function setPendingStream(cfg) {
       pendingStreamCfg = normalizeStreamConfig(cfg);
       streamCertOk = false;
-
       if (pendingStreamCfg.codec === 'webrtc') {
-        // Use the MediaMTX base URL for cert acceptance — the WHEP path only
-        // accepts POST and returns "method not allowed" when opened in a browser.
-        const cfg2 = pendingStreamCfg;
-        const webrtcBase = `${cfg2.protocol || 'https'}://${hostname}:${cfg2.port || 8889}/`;
-        pendingOpenUrl  = webrtcBase;
-        pendingProbeUrl = webrtcBase;
+        const c = pendingStreamCfg;
+        const base = `${c.protocol || 'https'}://${hostname}:${c.port || 8889}/`;
+        pendingOpenUrl = pendingProbeUrl = base;
       } else {
-        pendingOpenUrl = `${legacyStreamBase}/`;
-        pendingProbeUrl = pendingOpenUrl;
+        pendingOpenUrl = pendingProbeUrl = `${legacyStreamBase}/`;
       }
-
       checkStreamCert();
     }
 
@@ -720,14 +899,8 @@
       streamStatusDiv.textContent = 'Checking stream server...';
       enableStreamBtn.style.display = 'none';
       fetch(pendingProbeUrl, { mode: 'no-cors' })
-        .then(() => {
-          streamCertOk = true;
-          if (pendingStreamCfg) startStream(pendingStreamCfg);
-        })
-        .catch(() => {
-          streamStatusDiv.textContent = 'Tap below to enable the video stream';
-          enableStreamBtn.style.display = 'inline-block';
-        });
+        .then(() => { streamCertOk = true; if (pendingStreamCfg) startStream(pendingStreamCfg); })
+        .catch(() => { streamStatusDiv.textContent = 'Tap below to enable the video stream'; enableStreamBtn.style.display = 'inline-block'; });
     }
 
     function pollStreamCert() {
@@ -735,25 +908,16 @@
       let attempts = 0;
       certPollTimer = setInterval(() => {
         attempts++;
-        if (streamCertOk || !pendingProbeUrl || attempts > 30) {
-          clearInterval(certPollTimer);
-          certPollTimer = null;
-          return;
-        }
+        if (streamCertOk || !pendingProbeUrl || attempts > 30) { clearInterval(certPollTimer); certPollTimer = null; return; }
         fetch(pendingProbeUrl, { mode: 'no-cors' })
-          .then(() => {
-            clearInterval(certPollTimer);
-            certPollTimer = null;
-            streamCertOk = true;
-            if (pendingStreamCfg) startStream(pendingStreamCfg);
-          })
+          .then(() => { clearInterval(certPollTimer); certPollTimer = null; streamCertOk = true; if (pendingStreamCfg) startStream(pendingStreamCfg); })
           .catch(() => {});
       }, 1000);
     }
 
     enableStreamBtn.addEventListener('click', () => {
       streamStatusDiv.textContent = 'Accept the certificate in the popup…';
-      const popup = window.open(pendingOpenUrl || `${legacyStreamBase}/`, '_blank', 'width=480,height=360');
+      window.open(pendingOpenUrl || `${legacyStreamBase}/`, '_blank', 'width=480,height=360');
       pollStreamCert();
       window.addEventListener('message', function onMsg(e) {
         if (e.data === 'stream-cert-ok') {
@@ -762,148 +926,76 @@
           if (pendingStreamCfg) startStream(pendingStreamCfg);
         }
       });
-      // Fallback: if the postMessage never arrives (popup blocker, old browser)
-      // wait 5 s then try to start the stream anyway.
       setTimeout(() => {
         if (!streamCertOk && pendingStreamCfg && pendingStreamCfg.codec !== 'webrtc') {
-          streamCertOk = true;
-          startStream(pendingStreamCfg);
+          streamCertOk = true; startStream(pendingStreamCfg);
         }
       }, 5000);
     });
 
-    // Receive stream config pushed by the server on Socket.io connect.
-    socket.on('streamConfig', (cfg) => {
-      setPendingStream(cfg);
-    });
+    socket.on('streamConfig', (cfg) => { setPendingStream(cfg); });
 
-    // --- Device detection ---
+    // ── Device / control mode ─────────────────────────────────────────────────
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    // Control modes: 'joystick', 'keyboard', 'orientation'
-    let controlMode = isTouchDevice ? 'joystick' : 'keyboard';
-    let throttleValue = 0;
-    let steeringValue = 0;
-    let shiftValue = 1; // 1 = low gear, -1 = high gear (wiring reversed)
-    let tlockFrontValue = 1; // 1 = open, -1 = locked (wiring reversed)
-    let tlockRearValue = -1;  // -1 = open, 1 = locked
+    let controlMode      = isTouchDevice ? 'joystick' : 'keyboard';
+    let throttleValue    = 0;
+    let steeringValue    = 0;
+    let shiftValue       = 1;
+    let tlockFrontValue  = 1;
+    let tlockRearValue   = -1;
     let controlSendInterval = null;
 
-    // Steering curve: dead zone + exponential for less sensitivity near center
     const STEERING_DEADZONE = 0.08;
-    const STEERING_EXPO = 2.0;  // >1 = less sensitive near center, more at edges
+    const STEERING_EXPO     = 2.0;
     function applyCurve(raw) {
-      const sign = Math.sign(raw);
-      const abs = Math.abs(raw);
+      const sign = Math.sign(raw), abs = Math.abs(raw);
       if (abs < STEERING_DEADZONE) return 0;
-      // Remap from [deadzone..1] to [0..1], then apply expo
-      const remapped = (abs - STEERING_DEADZONE) / (1 - STEERING_DEADZONE);
-      return sign * Math.pow(remapped, STEERING_EXPO);
+      return sign * Math.pow((abs - STEERING_DEADZONE) / (1 - STEERING_DEADZONE), STEERING_EXPO);
     }
 
     function toggleShift() {
       const btn = document.getElementById('shiftBtn');
-      if (shiftValue > 0) {
-        shiftValue = -1;
-        btn.textContent = 'Gear: HIGH';
-        btn.classList.add('high');
-      } else {
-        shiftValue = 1;
-        btn.textContent = 'Gear: LOW';
-        btn.classList.remove('high');
-      }
+      if (shiftValue > 0) { shiftValue = -1; btn.textContent = 'Gear: HIGH'; btn.classList.add('high'); }
+      else                { shiftValue =  1; btn.textContent = 'Gear: LOW';  btn.classList.remove('high'); }
       sendControlValues();
     }
-
     function toggleTlockFront() {
       const btn = document.getElementById('tlockFrontBtn');
-      if (tlockFrontValue > 0) {
-        tlockFrontValue = -1;
-        btn.textContent = 'F.Diff: Lock';
-        btn.classList.add('locked');
-      } else {
-        tlockFrontValue = 1;
-        btn.textContent = 'F.Diff: Open';
-        btn.classList.remove('locked');
-      }
+      if (tlockFrontValue > 0) { tlockFrontValue = -1; btn.textContent = 'F.Diff: Lock'; btn.classList.add('locked'); }
+      else                     { tlockFrontValue =  1; btn.textContent = 'F.Diff: Open'; btn.classList.remove('locked'); }
       sendControlValues();
     }
-
     function toggleTlockRear() {
       const btn = document.getElementById('tlockRearBtn');
-      if (tlockRearValue < 0) {
-        tlockRearValue = 1;
-        btn.textContent = 'R.Diff: Lock';
-        btn.classList.add('locked');
-      } else {
-        tlockRearValue = -1;
-        btn.textContent = 'R.Diff: Open';
-        btn.classList.remove('locked');
-      }
+      if (tlockRearValue < 0) { tlockRearValue =  1; btn.textContent = 'R.Diff: Lock'; btn.classList.add('locked'); }
+      else                    { tlockRearValue = -1; btn.textContent = 'R.Diff: Open'; btn.classList.remove('locked'); }
       sendControlValues();
     }
 
-    // Make shift button work during active touch (joystick) and on desktop
-    const shiftBtnEl = document.getElementById('shiftBtn');
-    shiftBtnEl.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleShift();
-    }, { passive: false });
-    shiftBtnEl.addEventListener('click', (e) => {
-      if (!isTouchDevice) toggleShift();
-    });
-
-    // T-lock button handlers
-    const tlockFrontBtnEl = document.getElementById('tlockFrontBtn');
-    tlockFrontBtnEl.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleTlockFront();
-    }, { passive: false });
-    tlockFrontBtnEl.addEventListener('click', (e) => {
-      if (!isTouchDevice) toggleTlockFront();
-    });
-
-    const tlockRearBtnEl = document.getElementById('tlockRearBtn');
-    tlockRearBtnEl.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleTlockRear();
-    }, { passive: false });
-    tlockRearBtnEl.addEventListener('click', (e) => {
-      if (!isTouchDevice) toggleTlockRear();
-    });
+    function addButtonHandlers(id, toggleFn) {
+      const el = document.getElementById(id);
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toggleFn(); }, { passive: false });
+      el.addEventListener('click',      (e) => { if (!isTouchDevice) toggleFn(); });
+    }
+    addButtonHandlers('shiftBtn',      toggleShift);
+    addButtonHandlers('tlockFrontBtn', toggleTlockFront);
+    addButtonHandlers('tlockRearBtn',  toggleTlockRear);
 
     function activateControlMode(mode) {
-      // Teardown previous mode
       deactivateAllControls();
       controlMode = mode;
       controlModeBtn.textContent = `Control: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
-
-      if (mode === 'joystick') {
-        joystickLeftEl.style.display = 'block';
-        joystickRightEl.style.display = 'block';
-        keyboardHint.style.display = 'none';
-        enableBtn.style.display = 'none';
-        statusDiv.textContent = 'Status: Joystick control';
-      } else if (mode === 'keyboard') {
-        joystickLeftEl.style.display = 'none';
-        joystickRightEl.style.display = 'none';
-        keyboardHint.style.display = 'block';
-        enableBtn.style.display = 'none';
-        statusDiv.textContent = 'Status: Keyboard control (WASD / Arrows)';
-      } else if (mode === 'orientation') {
-        joystickLeftEl.style.display = 'none';
-        joystickRightEl.style.display = 'none';
-        keyboardHint.style.display = 'none';
-        requestOrientationPermission();
-      }
+      joystickLeftEl.style.display  = mode === 'joystick' ? 'block' : 'none';
+      joystickRightEl.style.display = mode === 'joystick' ? 'block' : 'none';
+      keyboardHint.style.display    = mode === 'keyboard'  ? 'block' : 'none';
+      enableBtn.style.display       = 'none';
+      if (mode === 'orientation') requestOrientationPermission();
+      renderStatusBar();
     }
 
     function deactivateAllControls() {
       window.removeEventListener('deviceorientation', handleOrientation, true);
-      throttleValue = 0;
-      steeringValue = 0;
+      throttleValue = 0; steeringValue = 0;
     }
 
     function currentSteeringCommand() {
@@ -911,325 +1003,192 @@
     }
 
     function sendControlValues() {
-      socket.volatile.emit('fromclient', {
-        throttle: throttleValue,
-        steering: currentSteeringCommand(),
-        shift: shiftValue,
+      const data = {
+        throttle:    throttleValue,
+        steering:    currentSteeringCommand(),
+        shift:       shiftValue,
         tlock_front: tlockFrontValue,
-        tlock_rear: tlockRearValue
-      });
+        tlock_rear:  tlockRearValue,
+      };
+      statUpBytes += JSON.stringify(data).length;
+      socket.volatile.emit('fromclient', data);
     }
 
     function startControlSendLoop() {
       if (controlSendInterval) return;
       sendControlValues();
-      controlSendInterval = setInterval(() => {
-        if (!stopped) sendControlValues();
-      }, 50);
+      controlSendInterval = setInterval(() => { if (!stopped) sendControlValues(); }, 50);
     }
-
     function stopControlSendLoop() {
       if (!controlSendInterval) return;
-      clearInterval(controlSendInterval);
-      controlSendInterval = null;
+      clearInterval(controlSendInterval); controlSendInterval = null;
     }
-
     function cycleControlMode() {
       const modes = ['joystick', 'keyboard', 'orientation'];
-      const next = modes[(modes.indexOf(controlMode) + 1) % modes.length];
-      activateControlMode(next);
+      activateControlMode(modes[(modes.indexOf(controlMode) + 1) % modes.length]);
     }
 
-    // --- Wake Lock ---
+    // ── Wake lock ─────────────────────────────────────────────────────────────
     async function requestWakeLock() {
-      try {
-        wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.addEventListener('release', () => {});
-      } catch (err) {
-        console.error(`Wake Lock error: ${err.name}, ${err.message}`);
-      }
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
     }
-
     document.addEventListener('visibilitychange', () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        requestWakeLock();
-      }
+      if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
     });
 
-    // --- Menu ---
+    // ── Menu ──────────────────────────────────────────────────────────────────
     menuBtn.addEventListener('click', () => {
       commandMenu.style.display = commandMenu.style.display === 'block' ? 'none' : 'block';
     });
 
-    // --- Startup ---
-    window.addEventListener('load', () => {
-      requestWakeLock();
-      activateControlMode(controlMode);
-    });
-
-    // --- Stop / Disconnect ---
+    // ── Stop / Start ──────────────────────────────────────────────────────────
     function toggleStop() {
       if (!stopped) {
-        // STOP: disarm and send neutral
-        throttleValue = 0;
-        steeringValue = 0;
-        sendControlValues();
-        stopControlSendLoop();
+        throttleValue = 0; steeringValue = 0;
+        sendControlValues(); stopControlSendLoop();
         socket.emit('disarm');
-        stopBtn.textContent = 'Start';
-        stopBtn.style.background = '#333';
+        stopBtn.textContent = 'Start'; stopBtn.style.background = '#333';
         stopped = true;
-        statusDiv.textContent = 'Status: DISARMED';
       } else {
-        // START: arm the vehicle
         socket.emit('arm');
         startControlSendLoop();
-        stopBtn.textContent = 'Stop';
-        stopBtn.style.background = '#a33';
+        stopBtn.textContent = 'Stop'; stopBtn.style.background = '#a33';
         stopped = false;
-        statusDiv.textContent = 'Status: ARMED';
       }
+      renderStatusBar();
     }
 
-    function refreshPage() {
-      window.location.reload();
-    }
+    function refreshPage() { window.location.reload(); }
+    function openConfig()  { /* defined above */ }
 
-    // --- Orientation controls ---
+    // ── Orientation controls ──────────────────────────────────────────────────
     function requestOrientationPermission() {
-      if (window.DeviceOrientationEvent) {
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-          DeviceOrientationEvent.requestPermission().then(state => {
-            if (state === 'granted') {
-              window.addEventListener('deviceorientation', handleOrientation, true);
-              enableBtn.style.display = 'none';
-              statusDiv.textContent = 'Status: Orientation control';
-            } else {
-              statusDiv.textContent = 'Status: Orientation permission denied';
-            }
-          }).catch(() => {
-            statusDiv.textContent = 'Status: Orientation error';
-          });
-        } else {
-          window.addEventListener('deviceorientation', handleOrientation, true);
-          enableBtn.style.display = 'none';
-          statusDiv.textContent = 'Status: Orientation control';
-        }
+      if (!window.DeviceOrientationEvent) return;
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(state => {
+            if (state === 'granted') { window.addEventListener('deviceorientation', handleOrientation, true); enableBtn.style.display = 'none'; }
+            renderStatusBar();
+          })
+          .catch(() => renderStatusBar());
       } else {
-        statusDiv.textContent = 'Status: Orientation not supported';
+        window.addEventListener('deviceorientation', handleOrientation, true);
+        enableBtn.style.display = 'none';
       }
     }
 
     function handleOrientation(event) {
       if (stopped) return;
-      const betadeg = event.beta;
-      const gammadeg = event.gamma;
+      const betadeg = event.beta, gammadeg = event.gamma;
       throttleValue = Math.max(-1, Math.min(1, (45 - betadeg) / 50));
       steeringValue = applyCurve(Math.max(-1, Math.min(1, gammadeg / 25)));
-      feedbackDiv.innerHTML =
-        `Throttle: ${betadeg.toFixed(1)}&deg; &rarr; ${throttleValue.toFixed(2)}<br>` +
-        `Steering: ${gammadeg.toFixed(1)}&deg; &rarr; ${steeringValue.toFixed(2)}<br>` +
-        `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
+      renderStatusBar();
     }
 
-    // --- Virtual joystick controls (touch) ---
+    // ── Virtual joysticks ─────────────────────────────────────────────────────
     function setupJoystick(zoneEl, thumbEl, axis) {
-      let active = false;
-      let touchId = null;
-      const baseRadius = 75; // half of 150px zone
-      const thumbRadius = 25;
-      const maxDist = baseRadius - thumbRadius;
+      let active = false, touchId = null;
+      const baseRadius = 75, thumbRadius = 25, maxDist = baseRadius - thumbRadius;
 
-      function getCenter() {
-        const rect = zoneEl.getBoundingClientRect();
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-      }
+      function getCenter() { const r = zoneEl.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; }
 
-      function handleMove(clientX, clientY) {
-        const center = getCenter();
-        let dx = clientX - center.x;
-        let dy = clientY - center.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > maxDist) {
-          dx = (dx / dist) * maxDist;
-          dy = (dy / dist) * maxDist;
-        }
+      function handleMove(cx, cy) {
+        const c = getCenter();
+        let dx = cx - c.x, dy = cy - c.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > maxDist) { dx = dx/dist*maxDist; dy = dy/dist*maxDist; }
         thumbEl.style.left = (baseRadius + dx) + 'px';
-        thumbEl.style.top = (baseRadius + dy) + 'px';
-
-        if (axis === 'throttle') {
-          // Up = positive throttle (forward), down = negative (reverse)
-          throttleValue = -(dy / maxDist);
-        } else {
-          // Right = positive steering
-          steeringValue = dx / maxDist;
-        }
-        sendJoystickValues();
+        thumbEl.style.top  = (baseRadius + dy) + 'px';
+        if (axis === 'throttle') throttleValue = -(dy / maxDist);
+        else                     steeringValue  =   dx / maxDist;
+        renderStatusBar();
       }
 
       function resetThumb() {
-        thumbEl.style.left = '50%';
-        thumbEl.style.top = '50%';
+        thumbEl.style.left = '50%'; thumbEl.style.top = '50%';
         thumbEl.style.transform = 'translate(-50%, -50%)';
-        if (axis === 'throttle') throttleValue = 0;
-        else steeringValue = 0;
-        sendJoystickValues();
+        if (axis === 'throttle') throttleValue = 0; else steeringValue = 0;
+        renderStatusBar();
       }
 
       zoneEl.addEventListener('touchstart', (e) => {
         if (active) return;
-        const t = e.changedTouches[0];
-        touchId = t.identifier;
-        active = true;
+        const t = e.changedTouches[0]; touchId = t.identifier; active = true;
         thumbEl.style.transform = 'translate(-50%, -50%)';
-        handleMove(t.clientX, t.clientY);
-        e.preventDefault();
+        handleMove(t.clientX, t.clientY); e.preventDefault();
       }, { passive: false });
 
       zoneEl.addEventListener('touchmove', (e) => {
         for (const t of e.changedTouches) {
-          if (t.identifier === touchId) {
-            handleMove(t.clientX, t.clientY);
-            e.preventDefault();
-            break;
-          }
+          if (t.identifier === touchId) { handleMove(t.clientX, t.clientY); e.preventDefault(); break; }
         }
       }, { passive: false });
 
       const endTouch = (e) => {
         for (const t of e.changedTouches) {
-          if (t.identifier === touchId) {
-            active = false;
-            touchId = null;
-            resetThumb();
-            e.preventDefault();
-            break;
-          }
+          if (t.identifier === touchId) { active = false; touchId = null; resetThumb(); e.preventDefault(); break; }
         }
       };
-
-      // Separate handler for touchcancel. Mobile browsers can fire this during
-      // multi-touch transitions. Preserve throttle to avoid abrupt motor cuts,
-      // but force steering back to center so it can't stick to one side.
       const cancelTouch = (e) => {
         for (const t of e.changedTouches) {
           if (t.identifier === touchId) {
-            active = false;
-            touchId = null;
-            if (axis === 'throttle') {
-              // Keep current throttle so transient touchcancel doesn't cause a
-              // sudden brake/reverse event.
-              console.log('touchcancel on throttle — value preserved at', throttleValue);
-            } else {
-              // Steering must fail-safe to center immediately on cancel.
-              resetThumb();
-              console.log('touchcancel on steering — reset to center');
-            }
-            e.preventDefault();
-            break;
+            active = false; touchId = null;
+            if (axis === 'throttle') console.log('touchcancel throttle — preserved');
+            else { resetThumb(); console.log('touchcancel steering — reset'); }
+            e.preventDefault(); break;
           }
         }
       };
-
-      zoneEl.addEventListener('touchend', endTouch, { passive: false });
+      zoneEl.addEventListener('touchend',   endTouch,    { passive: false });
       zoneEl.addEventListener('touchcancel', cancelTouch, { passive: false });
     }
 
-    let joystickSendInterval = null;
-    function sendJoystickValues() {
-      if (stopped) return;
-      // Throttle UI feedback to ~20Hz; the shared control loop sends commands.
-      if (joystickSendInterval) return;
-      joystickSendInterval = setTimeout(() => {
-        joystickSendInterval = null;
-        const curvedSteering = applyCurve(steeringValue);
-        feedbackDiv.innerHTML =
-          `Throttle: ${throttleValue.toFixed(2)}<br>` +
-          `Steering: ${curvedSteering.toFixed(2)}`;
-      }, 50);
-    }
-
-    setupJoystick(joystickLeftEl, thumbLeft, 'throttle');
+    setupJoystick(joystickLeftEl,  thumbLeft,  'throttle');
     setupJoystick(joystickRightEl, thumbRight, 'steering');
 
-    // --- Keyboard controls (desktop) ---
+    // ── Keyboard controls ─────────────────────────────────────────────────────
     const keysDown = {};
-    const KEY_THROTTLE_STEP = 0.05;
-    const KEY_STEERING_STEP = 0.15;
+    const KEY_THROTTLE_STEP = 0.05, KEY_STEERING_STEP = 0.15;
     let keyboardInterval = null;
 
     function startKeyboardLoop() {
       if (keyboardInterval) return;
       keyboardInterval = setInterval(() => {
         if (stopped || controlMode !== 'keyboard') return;
+        if      (keysDown['KeyW'] || keysDown['ArrowUp'])    throttleValue = Math.min( 1, throttleValue + KEY_THROTTLE_STEP);
+        else if (keysDown['KeyS'] || keysDown['ArrowDown'])  throttleValue = Math.max(-1, throttleValue - KEY_THROTTLE_STEP);
+        else { if (Math.abs(throttleValue) < KEY_THROTTLE_STEP) throttleValue = 0; else throttleValue -= Math.sign(throttleValue) * KEY_THROTTLE_STEP; }
 
-        // Throttle
-        if (keysDown['KeyW'] || keysDown['ArrowUp']) {
-          throttleValue = Math.min(1, throttleValue + KEY_THROTTLE_STEP);
-        } else if (keysDown['KeyS'] || keysDown['ArrowDown']) {
-          throttleValue = Math.max(-1, throttleValue - KEY_THROTTLE_STEP);
-        } else {
-          // Decay toward zero
-          if (Math.abs(throttleValue) < KEY_THROTTLE_STEP) throttleValue = 0;
-          else throttleValue -= Math.sign(throttleValue) * KEY_THROTTLE_STEP;
-        }
+        if      (keysDown['KeyA'] || keysDown['ArrowLeft'])  steeringValue = Math.max(-1, steeringValue - KEY_STEERING_STEP);
+        else if (keysDown['KeyD'] || keysDown['ArrowRight']) steeringValue = Math.min( 1, steeringValue + KEY_STEERING_STEP);
+        else { if (Math.abs(steeringValue) < KEY_STEERING_STEP) steeringValue = 0; else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP; }
 
-        // Steering
-        if (keysDown['KeyA'] || keysDown['ArrowLeft']) {
-          steeringValue = Math.max(-1, steeringValue - KEY_STEERING_STEP);
-        } else if (keysDown['KeyD'] || keysDown['ArrowRight']) {
-          steeringValue = Math.min(1, steeringValue + KEY_STEERING_STEP);
-        } else {
-          if (Math.abs(steeringValue) < KEY_STEERING_STEP) steeringValue = 0;
-          else steeringValue -= Math.sign(steeringValue) * KEY_STEERING_STEP;
-        }
-
-        feedbackDiv.innerHTML =
-          `Throttle: ${throttleValue.toFixed(2)}<br>` +
-          `Steering: ${applyCurve(steeringValue).toFixed(2)}<br>` +
-          `Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
+        renderStatusBar();
       }, 50);
     }
 
     document.addEventListener('keydown', (e) => {
       if (controlMode !== 'keyboard') return;
       if (e.code === 'Space') {
-        e.preventDefault();
-        throttleValue = 0;
-        steeringValue = 0;
-        sendControlValues();
-        feedbackDiv.innerHTML = `Throttle: 0.00<br>Steering: 0.00<br>Gear: ${shiftValue > 0 ? 'HIGH' : 'LOW'}`;
-        return;
+        e.preventDefault(); throttleValue = 0; steeringValue = 0;
+        sendControlValues(); renderStatusBar(); return;
       }
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-        e.preventDefault();
-        toggleShift();
-        return;
-      }
-      if (!keysDown[e.code]) {
-        keysDown[e.code] = true;
-        startKeyboardLoop();
-      }
-      // Prevent page scrolling with arrow keys
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { e.preventDefault(); toggleShift(); return; }
+      if (!keysDown[e.code]) { keysDown[e.code] = true; startKeyboardLoop(); }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
     });
+    document.addEventListener('keyup', (e) => { delete keysDown[e.code]; });
 
-    document.addEventListener('keyup', (e) => {
-      delete keysDown[e.code];
-      if (Object.keys(keysDown).length === 0 && keyboardInterval) {
-        // Keep interval running briefly to allow decay
-      }
-    });
+    // ── Socket status ─────────────────────────────────────────────────────────
+    socket.on('connect',    () => { isConnected = true;  renderStatusBar(); });
+    socket.on('disconnect', () => { isConnected = false; renderStatusBar(); });
 
-    // --- Socket status ---
-    socket.on('connect', () => {
-      statusDiv.textContent = `Status: Connected (${controlMode})`;
-    });
-
-    socket.on('disconnect', () => {
-      statusDiv.textContent = 'Status: Disconnected';
+    // ── Startup ───────────────────────────────────────────────────────────────
+    window.addEventListener('load', () => {
+      requestWakeLock();
+      applyButtonVisibility();
+      activateControlMode(controlMode);
+      renderStatusBar();
     });
   </script>
 </body>
