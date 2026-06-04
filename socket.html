@@ -981,7 +981,9 @@
       if (pendingStreamCfg.codec === 'webrtc') {
         const c = pendingStreamCfg;
         const base = `${c.protocol || 'https'}://${hostname}:${c.port || 8889}/`;
-        pendingOpenUrl = pendingProbeUrl = base;
+        const camPath = (c.path || 'cam').replace(/^\/+/, '');
+        pendingOpenUrl = `${base}${camPath}/`;
+        pendingProbeUrl = base;
       } else {
         pendingOpenUrl = pendingProbeUrl = `${legacyStreamBase}/`;
       }
