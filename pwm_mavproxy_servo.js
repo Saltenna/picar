@@ -102,7 +102,7 @@ class PWMMavproxy {
     this.interval = null;
     this.heartbeatInterval = null;
 
-    console.log(`MAVProxy PWM driver: TCP server on ${this.host}:${this.port}, ` +
+    console.log(`MAVProxy PWM driver: connecting to tcpin at ${this.host}:${this.port}, ` +
       `target sys=${this.target_system} comp=${this.target_component}, ${this.rate_hz}Hz`);
     console.log(
       `MAVProxy input scaling: ${this.legacyInputScale ? 'legacy PWM values' : 'normalized [-1..1]'} ` +
@@ -113,45 +113,37 @@ class PWMMavproxy {
   }
 
   startServer() {
-    this.server = net.createServer((socket) => {
-      console.log(`MAVProxy connected from ${socket.remoteAddress}:${socket.remotePort}`);
+    this._connect();
+  }
 
-      // If we already have a client, replace it
-      if (this.client) {
-        console.log('Replacing previous MAVProxy connection');
-        this.client.removeAllListeners();
-        this.client.destroy();
-      }
+  _connect() {
+    if (this.client) return;
+    const socket = net.createConnection({ host: this.host, port: this.port }, () => {
+      console.log(`MAVProxy: connected to tcpin server at ${this.host}:${this.port}`);
       this.client = socket;
       this.pixhawkHeartbeatSeen = false;
       this.paramOverlayApplied = false;
       this.startHeartbeat();
       this.startLoop();
-
-      socket.on('data', (data) => {
-        this.parseIncoming(data);
-      });
-
-      socket.on('error', (err) => {
-        console.error('MAVProxy client error:', err.message);
-      });
-
-      socket.on('close', () => {
-        console.log('MAVProxy client disconnected');
-        if (this.client === socket) {
-          this.client = null;
-          if (this.interval) { clearInterval(this.interval); this.interval = null; }
-          if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
-        }
-      });
     });
 
-    this.server.listen(this.port, this.host, () => {
-      console.log(`MAVProxy PWM driver listening on ${this.host}:${this.port}`);
+    socket.on('data', (data) => {
+      this.parseIncoming(data);
     });
 
-    this.server.on('error', (err) => {
-      console.error('MAVProxy server error:', err.message);
+    socket.on('error', (err) => {
+      // ECONNREFUSED means mavproxy isn't ready yet — retry quietly
+      if (err.code !== 'ECONNREFUSED') {
+        console.error('MAVProxy connection error:', err.message);
+      }
+    });
+
+    socket.on('close', () => {
+      console.log('MAVProxy: connection closed, retrying in 2s…');
+      this.client = null;
+      if (this.interval) { clearInterval(this.interval); this.interval = null; }
+      if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
+      setTimeout(() => this._connect(), 2000);
     });
   }
 
