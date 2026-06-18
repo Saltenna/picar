@@ -11,7 +11,9 @@ WorkingDirectory=/var/log/mavproxy
 ExecStart=/opt/venvs/mavproxy/bin/mavproxy.py \
   --master=/dev/ttyACM0 \
   --baudrate 115200 \
-  --out=tcp:127.0.0.1:5760 \
+  --out=tcpin:127.0.0.1:5760 \
+  --streamrate 4 \
+  --logfile /tmp/mav.tlog \
   --non-interactive
 Restart=always
 
