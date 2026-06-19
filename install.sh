@@ -65,6 +65,8 @@ install_unit() {
       {print}
     ' "$src" > "$dst"
   fi
+  # Substitute actual repo path for the /opt/picar placeholder
+  sed -i "s|/opt/picar|${REPO_DIR}|g" "$dst"
   if [[ "$unit_name" == "mavproxy.service" ]]; then
     sed -i -E "s/--master=([^ \\]+|\\S+)/--master=${MAVPROXY_MASTER//\//\\/}/" "$dst" || true
     sed -i -E "s/--baudrate[= ]+[0-9]+/--baudrate ${MAVPROXY_BAUD}/" "$dst" || true
