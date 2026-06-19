@@ -19,6 +19,8 @@ try {
 const PWMDriver = require('./pwm_servo');
 const pwm = PWMDriver(config);
 
+require('./fleet-heartbeat').start(config);
+
 const file = new static.Server();
 const options = {
   key:  fs.readFileSync('./certs/key.pem'),

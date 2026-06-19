@@ -1,4 +1,9 @@
 {
+  "rover_id": 1,
+  "fleetManagerUrl": "",
+  "fleet_heartbeat_interval_s": 5,
+  "batteryWarnLevel": 20,
+
   "comment1": "pigpion is for the native picpio lib in C",
   "comment2": "mavproxy is backend for mavproxy to talk w/ pixhawk, push pwm there ",
   "pwm_method": "mavproxy",

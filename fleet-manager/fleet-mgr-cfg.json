@@ -1,0 +1,4 @@
+{
+  "port": 3000,
+  "offline_threshold_s": 15
+}

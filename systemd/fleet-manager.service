@@ -1,0 +1,15 @@
+[Unit]
+Description=PiCar Fleet Manager
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/picar/fleet-manager/server.js
+WorkingDirectory=/opt/picar/fleet-manager
+StandardOutput=journal
+StandardError=journal
+Restart=always
+User=saltenna
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

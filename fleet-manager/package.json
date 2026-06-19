@@ -1,0 +1,9 @@
+{
+  "name": "picar-fleet-manager",
+  "version": "0.1.0",
+  "description": "PiCar fleet dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
