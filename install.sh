@@ -44,6 +44,32 @@ fi
 say "Install mode: ${INSTALL_MODE}"
 
 
+# ── Shared helpers ───────────────────────────────────────────────────────────
+UNIT_DST_DIR="/lib/systemd/system"
+
+install_unit() {
+  local src="$1"
+  local dst="${UNIT_DST_DIR}/$(basename "$src")"
+  local unit_name="$(basename "$src")"
+  mkdir -p "${UNIT_DST_DIR}"
+  if grep -qE '^User=' "$src"; then
+    sed -E "s/^User=.*/User=${RUN_USER}/" "$src" > "$dst"
+  else
+    awk -v u="${RUN_USER}" '
+      /^\[Service\]$/ {print; print "User="u; next}
+      {print}
+    ' "$src" > "$dst"
+  fi
+  if [[ "$unit_name" == "mavproxy.service" ]]; then
+    sed -i -E "s/--master=([^ \\]+|\\S+)/--master=${MAVPROXY_MASTER//\//\\/}/" "$dst" || true
+    sed -i -E "s/--baudrate[= ]+[0-9]+/--baudrate ${MAVPROXY_BAUD}/" "$dst" || true
+    sed -i -E "s#/dev/ttyACM0#${MAVPROXY_MASTER}#g" "$dst" || true
+    sed -i -E "s/--baudrate[ ]+115200/--baudrate ${MAVPROXY_BAUD}/g" "$dst" || true
+  fi
+  chmod 0644 "$dst"
+  say "Installed $(basename "$dst")"
+}
+
 # ── Shared: run user ─────────────────────────────────────────────────────────
 SUDO_USER_NAME="${SUDO_USER:-}"
 DEFAULT_RUN_USER="${SUDO_USER_NAME:-saltenna}"
@@ -84,15 +110,7 @@ if [[ "$INSTALL_MODE" == "fleet" ]]; then
 
   chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}" || true
 
-  # Install fleet-manager systemd unit
-  UNIT_SRC="${REPO_DIR}/systemd/fleet-manager.service"
-  UNIT_DST="/lib/systemd/system/fleet-manager.service"
-  sed -E "s/^User=.*/User=${RUN_USER}/" "${UNIT_SRC}" > "${UNIT_DST}"
-  # Point ExecStart at fleet-manager subdir
-  sed -i "s|/opt/picar/app.js|/opt/picar/fleet-manager/server.js|g" "${UNIT_DST}" || true
-  sed -i "s|WorkingDirectory=.*|WorkingDirectory=/opt/picar/fleet-manager|" "${UNIT_DST}" || true
-  chmod 0644 "${UNIT_DST}"
-
+  install_unit "${REPO_DIR}/systemd/fleet-manager.service"
   systemctl daemon-reload
   systemctl enable --now fleet-manager.service
   say "Fleet Manager installed and running on port 3000."
@@ -312,36 +330,11 @@ fi
 # systemd install with templating of User=
 say "Installing systemd units..."
 UNIT_SRC_DIR="${REPO_DIR}/systemd"
-UNIT_DST_DIR="/lib/systemd/system"
-mkdir -p "${UNIT_DST_DIR}"
-
-install_unit() {
-  local src="$1"
-  local dst="${UNIT_DST_DIR}/$(basename "$src")"
-  local unit_name="$(basename "$src")"
-  # Replace the User= line; if none exists, add one under [Service]
-  if grep -qE '^User=' "$src"; then
-    sed -E "s/^User=.*/User=${RUN_USER}/" "$src" > "$dst"
-  else
-    awk -v u="${RUN_USER}" '
-      /^\[Service\]$/ {print; print "User="u; next}
-      {print}
-    ' "$src" > "$dst"
-  fi
-  if [[ "$unit_name" == "mavproxy.service" ]]; then
-    # Update master/baudrate flags if present
-    sed -i -E "s/--master=([^ \\]+|\\S+)/--master=${MAVPROXY_MASTER//\//\\/}/" "$dst" || true
-    sed -i -E "s/--baudrate[= ]+[0-9]+/--baudrate ${MAVPROXY_BAUD}/" "$dst" || true
-    sed -i -E "s#/dev/ttyACM0#${MAVPROXY_MASTER}#g" "$dst" || true
-    sed -i -E "s/--baudrate[ ]+115200/--baudrate ${MAVPROXY_BAUD}/g" "$dst" || true
-  fi
-  chmod 0644 "$dst"
-  say "Installed $(basename "$dst")"
-}
 
 if [[ -d "${UNIT_SRC_DIR}" ]]; then
   for f in "${UNIT_SRC_DIR}"/*.service; do
     [[ -e "$f" ]] || continue
+    [[ "$(basename "$f")" == "fleet-manager.service" ]] && continue
     install_unit "$f"
   done
 else
