@@ -43,6 +43,11 @@ if [[ -z "$INSTALL_MODE" ]]; then
 fi
 say "Install mode: ${INSTALL_MODE}"
 
+# ── Paths ─────────────────────────────────────────────────────────────────────
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+VENV_BASE="/opt/venvs"
+say "Picar directory: ${REPO_DIR}"
+say "Venv base: ${VENV_BASE}"
 
 # ── Shared helpers ───────────────────────────────────────────────────────────
 UNIT_DST_DIR="/lib/systemd/system"
@@ -92,7 +97,8 @@ if [[ "$INSTALL_MODE" == "fleet" ]]; then
   apt-get update -y
   apt-get install -y git nodejs npm
 
-  REPO_DIR="/opt/picar"
+  read -r -p "Install picar repo to? (default: /opt/picar): " _fdir || true
+  REPO_DIR="${_fdir:-/opt/picar}"
   REPO_SSH="git@github.com:Saltenna/picar.git"
   REPO_HTTPS="https://github.com/Saltenna/picar.git"
 
@@ -229,32 +235,9 @@ if [[ "${PWM_METHOD}" == "pigpion" || "${PWM_METHOD}" == "pigpiod" ]]; then
 fi
 
 # /opt layout
-say "Ensuring /opt layout..."
-mkdir -p /opt /opt/venvs
-chmod 0755 /opt /opt/venvs
-
-# Clone/update repo
-REPO_DIR="/opt/picar"
-REPO_SSH="git@github.com:Saltenna/picar.git"
-REPO_HTTPS="https://github.com/Saltenna/picar.git"
-
-if [[ -d "${REPO_DIR}/.git" ]]; then
-  say "Updating existing repo at ${REPO_DIR}..."
-  git -C "${REPO_DIR}" fetch --all --prune
-  git -C "${REPO_DIR}" pull --ff-only || true
-else
-  say "Cloning repo into ${REPO_DIR}..."
-  if [[ -d "${REPO_DIR}" && ! -e "${REPO_DIR}/.git" ]]; then
-    die "${REPO_DIR} exists but is not a git repo. Move it aside and re-run."
-  fi
-  # Try SSH first; fall back to HTTPS if SSH fails (missing key, etc.)
-  if git clone "${REPO_SSH}" "${REPO_DIR}" 2>/dev/null; then
-    :
-  else
-    say "SSH clone failed; trying HTTPS clone..."
-    git clone "${REPO_HTTPS}" "${REPO_DIR}"
-  fi
-fi
+say "Ensuring ${VENV_BASE} exists..."
+mkdir -p "${VENV_BASE}"
+chmod 0755 "${VENV_BASE}"
 
 # Node deps
 say "Installing Node dependencies..."
@@ -292,14 +275,14 @@ fi
 
 # MAVProxy install
 if [[ "${USE_MAVPROXY}" == "yes" ]]; then
-  say "Installing MAVProxy into /opt/venvs/mavproxy ..."
+  say "Installing MAVProxy into ${VENV_BASE}/mavproxy ..."
   apt-get install -y python3-dev build-essential || true
-  mkdir -p /opt/venvs /var/log/mavproxy
+  mkdir -p "${VENV_BASE}" /var/log/mavproxy
   chown -R "${RUN_USER}:${RUN_USER}" /var/log/mavproxy || true
 
-  python3 -m venv /opt/venvs/mavproxy
-  /opt/venvs/mavproxy/bin/pip install --upgrade pip wheel
-  /opt/venvs/mavproxy/bin/pip install --upgrade MAVProxy pyserial future
+  python3 -m venv "${VENV_BASE}/mavproxy"
+  "${VENV_BASE}/mavproxy/bin/pip" install --upgrade pip wheel
+  "${VENV_BASE}/mavproxy/bin/pip" install --upgrade MAVProxy pyserial future
 fi
 
 # MediaMTX install for WebRTC video
