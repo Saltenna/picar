@@ -95,26 +95,7 @@ fi
 if [[ "$INSTALL_MODE" == "fleet" ]]; then
   say "Installing Fleet Manager..."
   apt-get update -y
-  apt-get install -y git nodejs npm
-
-  read -r -p "Install picar repo to? (default: /opt/picar): " _fdir || true
-  REPO_DIR="${_fdir:-/opt/picar}"
-  REPO_SSH="git@github.com:Saltenna/picar.git"
-  REPO_HTTPS="https://github.com/Saltenna/picar.git"
-
-  if [[ -d "${REPO_DIR}/.git" ]]; then
-    say "Updating existing repo at ${REPO_DIR}..."
-    git -C "${REPO_DIR}" fetch --all --prune
-    git -C "${REPO_DIR}" pull --ff-only || true
-  else
-    if git clone "${REPO_SSH}" "${REPO_DIR}" 2>/dev/null; then :
-    else
-      say "SSH clone failed; trying HTTPS..."
-      git clone "${REPO_HTTPS}" "${REPO_DIR}"
-    fi
-  fi
-
-  chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}" || true
+  apt-get install -y nodejs npm
 
   install_unit "${REPO_DIR}/systemd/fleet-manager.service"
   systemctl daemon-reload
@@ -247,9 +228,6 @@ if [[ -f package-lock.json ]]; then
 else
   npm install --omit=dev
 fi
-
-# Ensure ownership for runtime user
-chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}" || true
 
 # Configure picar-cfg.json
 CFG="${REPO_DIR}/picar-cfg.json"
