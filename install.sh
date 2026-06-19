@@ -2,11 +2,10 @@
 set -euo pipefail
 
 # PiCar installer for Raspberry Pi OS (Trixie)
-# - Installs OS packages
-# - Clones / updates /opt/picar
-# - Installs Node deps
-# - (Optional) Installs MAVProxy in /opt/venvs/mavproxy
-# - Installs and enables systemd services
+# Usage: sudo ./install.sh [--picar | --fleet]
+#   --picar  Install rover software (picar + MAVProxy + optional MediaMTX)
+#   --fleet  Install Fleet Manager server only
+#   (no flag) prompts for choice
 
 LOG_PREFIX="[picar-install]"
 say() { echo -e "${LOG_PREFIX} $*"; }
@@ -18,9 +17,91 @@ if [[ "${EUID}" -ne 0 ]]; then
   die "Please run as root (e.g. sudo ./install.sh)"
 fi
 
+# ── Install mode ──────────────────────────────────────────────────────────────
+INSTALL_MODE=""
+for arg in "$@"; do
+  case "$arg" in
+    --picar) INSTALL_MODE="picar" ;;
+    --fleet) INSTALL_MODE="fleet" ;;
+    *) die "Unknown argument: $arg (use --picar or --fleet)" ;;
+  esac
+done
+
+if [[ -z "$INSTALL_MODE" ]]; then
+  echo ""
+  echo "What would you like to install?"
+  echo "  1) picar  — rover software (picar + MAVProxy + optional MediaMTX)"
+  echo "  2) fleet  — Fleet Manager server (dashboard for multiple rovers)"
+  while true; do
+    read -r -p "Choose 1 or 2: " _mode || true
+    case "$_mode" in
+      1) INSTALL_MODE="picar"; break ;;
+      2) INSTALL_MODE="fleet"; break ;;
+      *) echo "Please enter 1 or 2." ;;
+    esac
+  done
+fi
+say "Install mode: ${INSTALL_MODE}"
+
+
+# ── Shared: run user ─────────────────────────────────────────────────────────
 SUDO_USER_NAME="${SUDO_USER:-}"
 DEFAULT_RUN_USER="${SUDO_USER_NAME:-saltenna}"
+RUN_USER="$( (read -r -p "Which Linux user should run the services? (default: ${DEFAULT_RUN_USER}): " u && echo "${u:-$DEFAULT_RUN_USER}") || echo "$DEFAULT_RUN_USER" )"
+say "Services will run as user: ${RUN_USER}"
 
+if ! id -u "${RUN_USER}" >/dev/null 2>&1; then
+  say "User '${RUN_USER}' does not exist."
+  if prompt_yes_no "Create user '${RUN_USER}' now?" "y"; then
+    useradd -m -s /bin/bash "${RUN_USER}"
+    say "Created user '${RUN_USER}'."
+  else
+    die "User '${RUN_USER}' is required to run services."
+  fi
+fi
+
+# ── Fleet Manager install ─────────────────────────────────────────────────────
+if [[ "$INSTALL_MODE" == "fleet" ]]; then
+  say "Installing Fleet Manager..."
+  apt-get update -y
+  apt-get install -y git nodejs npm
+
+  REPO_DIR="/opt/picar"
+  REPO_SSH="git@github.com:Saltenna/picar.git"
+  REPO_HTTPS="https://github.com/Saltenna/picar.git"
+
+  if [[ -d "${REPO_DIR}/.git" ]]; then
+    say "Updating existing repo at ${REPO_DIR}..."
+    git -C "${REPO_DIR}" fetch --all --prune
+    git -C "${REPO_DIR}" pull --ff-only || true
+  else
+    if git clone "${REPO_SSH}" "${REPO_DIR}" 2>/dev/null; then :
+    else
+      say "SSH clone failed; trying HTTPS..."
+      git clone "${REPO_HTTPS}" "${REPO_DIR}"
+    fi
+  fi
+
+  chown -R "${RUN_USER}:${RUN_USER}" "${REPO_DIR}" || true
+
+  # Install fleet-manager systemd unit
+  UNIT_SRC="${REPO_DIR}/systemd/fleet-manager.service"
+  UNIT_DST="/lib/systemd/system/fleet-manager.service"
+  sed -E "s/^User=.*/User=${RUN_USER}/" "${UNIT_SRC}" > "${UNIT_DST}"
+  # Point ExecStart at fleet-manager subdir
+  sed -i "s|/opt/picar/app.js|/opt/picar/fleet-manager/server.js|g" "${UNIT_DST}" || true
+  sed -i "s|WorkingDirectory=.*|WorkingDirectory=/opt/picar/fleet-manager|" "${UNIT_DST}" || true
+  chmod 0644 "${UNIT_DST}"
+
+  systemctl daemon-reload
+  systemctl enable --now fleet-manager.service
+  say "Fleet Manager installed and running on port 3000."
+  say "Dashboard: http://$(hostname -I | awk '{print $1}'):3000"
+  say "Done."
+  exit 0
+fi
+
+# ── Picar rover install ───────────────────────────────────────────────────────
 PI_MODEL_RAW="$(tr -d '\0' </proc/device-tree/model 2>/dev/null || true)"
 PI_MODEL="${PI_MODEL_RAW:-unknown}"
 PI_GEN="unknown"
@@ -63,19 +144,6 @@ prompt_choice() {
     echo "Invalid choice." >&2
   done
 }
-
-RUN_USER="$( (read -r -p "Which Linux user should run the services? (default: ${DEFAULT_RUN_USER}): " u && echo "${u:-$DEFAULT_RUN_USER}") || echo "$DEFAULT_RUN_USER" )"
-say "Services will run as user: ${RUN_USER}"
-
-if ! id -u "${RUN_USER}" >/dev/null 2>&1; then
-  say "User '${RUN_USER}' does not exist."
-  if prompt_yes_no "Create user '${RUN_USER}' now?" "y"; then
-    useradd -m -s /bin/bash "${RUN_USER}"
-    say "Created user '${RUN_USER}'."
-  else
-    die "User '${RUN_USER}' is required to run services."
-  fi
-fi
 
 # Groups that are commonly needed on Pi for GPIO/camera/serial
 for grp in video gpio dialout i2c spi; do
