@@ -62,6 +62,23 @@ const appServer = https.createServer(options, (req, res) => {
   if (parsed.pathname === '/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'OK', throttle: old_throttle, steering: old_steering }));
+  } else if (parsed.pathname === '/manifest.json') {
+    const roverId = config.rover_id ?? 1;
+    const manifest = {
+      name:             `PiCar Rover ${roverId}`,
+      short_name:       `Rover ${roverId}`,
+      start_url:        '/socket.html',
+      display:          'fullscreen',
+      orientation:      'landscape',
+      background_color: '#000000',
+      theme_color:      '#000000',
+      icons: [
+        { src: `/icons/rover${roverId}-192.png`, sizes: '192x192', type: 'image/png' },
+        { src: `/icons/rover${roverId}-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+    res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+    res.end(JSON.stringify(manifest));
   } else {
     file.serve(req, res);
   }

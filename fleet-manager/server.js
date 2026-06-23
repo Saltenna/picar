@@ -78,6 +78,41 @@ const server = http.createServer(async (req, res) => {
     return res.end(html);
   }
 
+  // GET /manifest.json
+  if (req.method === 'GET' && parsed.pathname === '/manifest.json') {
+    const manifest = {
+      name:             'PiCar Fleet Manager',
+      short_name:       'Fleet',
+      start_url:        '/',
+      display:          'standalone',
+      orientation:      'any',
+      background_color: '#0d0d0d',
+      theme_color:      '#0d0d0d',
+      icons: [
+        { src: '/icons/fleet-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/fleet-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+    res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+    return res.end(JSON.stringify(manifest));
+  }
+
+  // GET /icons/* — serve icons from parent icons/ dir
+  if (req.method === 'GET' && parsed.pathname.startsWith('/icons/')) {
+    const iconFile = path.join(__dirname, '..', 'icons', path.basename(parsed.pathname));
+    if (fs.existsSync(iconFile)) {
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      return res.end(fs.readFileSync(iconFile));
+    }
+  }
+
+  // GET /sw.js — service worker
+  if (req.method === 'GET' && parsed.pathname === '/sw.js') {
+    const sw = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+    res.writeHead(200, { 'Content-Type': 'application/javascript' });
+    return res.end(sw);
+  }
+
   res.writeHead(404);
   res.end('Not found');
 });
