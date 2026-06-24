@@ -22,6 +22,7 @@ function setStatusBit(bit, value) {
 }
 
 function start(config) {
+  if (config.fleet_enabled === false) return;
   const fleetUrl = config.fleetManagerUrl;
   if (!fleetUrl) return;
 
