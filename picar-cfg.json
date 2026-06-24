@@ -1,5 +1,6 @@
 {
   "rover_id": 1,
+  "fleet_enabled": true,
   "fleetManagerUrl": "",
   "fleet_heartbeat_interval_s": 5,
   "batteryWarnLevel": 20,
